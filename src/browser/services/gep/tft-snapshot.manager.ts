@@ -106,6 +106,9 @@ export class TftSnapshotManager {
     this.bufferedUpdates = [];
     this.reconciling = false;
 
+    // getInfo() is the authoritative baseline. Replace stale cached fields,
+    // then replay deltas that arrived while the baseline was being fetched.
+    this.snapshot.info = {};
     this.mergePayload(info, true);
     for (const update of pending) this.mergePayload(update, false);
     this.snapshot.complete = true;
