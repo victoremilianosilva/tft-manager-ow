@@ -55,7 +55,8 @@
     "build:dev": "yarn webpack --watch --mode=development",
     "build:start": "yarn run build && ow-electron .",
     "start-ad": "yarn run ow-electron --test-ad .",
-    "build:ow-electron": "dotenv --override --no-expand -- ow-electron-builder --publish=never"
+    "build:ow-electron": "dotenv --override --no-expand -- ow-electron-builder --publish=never",
+    "test:gep": "node scripts/test-tft-snapshot-manager.js"
   },
   "devDependencies": {
     "@overwolf/ow-electron": "latest",
