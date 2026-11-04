@@ -4,12 +4,31 @@ import { GameEventsService } from '../../services/gep/game-events.service';
 import { TftSnapshotRecorder } from '../../services/gep/tft-snapshot.recorder';
 import { OverwolfGameEventPackage } from '@overwolf/ow-electron-packages-types';
 
+function summarizeGepPayload(data: any): Record<string, unknown> {
+  if (!data || typeof data !== 'object') return { payloadType: typeof data };
+
+  const summary: Record<string, unknown> = {
+    keys: Object.keys(data).slice(0, 12),
+  };
+  for (const key of ['feature', 'category', 'key', 'name', 'event', 'game_flow']) {
+    if (data[key] !== undefined && typeof data[key] !== 'object') {
+      summary[key] = data[key];
+    }
+  }
+  if (data.info && typeof data.info === 'object') {
+    summary.infoFeatures = Object.keys(data.info);
+  }
+  return summary;
+}
+
 /** Connects Overwolf GEP events to the TFT capture service. */
 export class GameEventsController extends PackageControllerBase {
   private _gepService: GameEventsService;
   private _gepApi: OverwolfGameEventPackage;
   private _snapshotRecorder: TftSnapshotRecorder;
   private _registeredGameIds: number[] = [];
+  private _lastLoggedSnapshotRevision = -1;
+  private _recorderPathLogged = false;
 
   constructor() {
     super('gep');
@@ -27,7 +46,24 @@ export class GameEventsController extends PackageControllerBase {
         this.emit('tft-features-ready', details);
       });
       this._gepService.on('tft-snapshot', snapshot => {
-        void this._snapshotRecorder.record(snapshot).catch(error => {
+        if (
+          snapshot.revision === 1 ||
+          snapshot.revision - this._lastLoggedSnapshotRevision >= 25
+        ) {
+          this.log('TFT snapshot updated', {
+            revision: snapshot.revision,
+            complete: snapshot.complete,
+            topLevelFeatures: Object.keys(snapshot.info ?? {}),
+          });
+          this._lastLoggedSnapshotRevision = snapshot.revision;
+        }
+
+        void this._snapshotRecorder.record(snapshot).then(() => {
+          if (!this._recorderPathLogged) {
+            this.log('TFT JSONL capture file', this._snapshotRecorder.getFilePath());
+            this._recorderPathLogged = true;
+          }
+        }).catch(error => {
           this.error('Failed to persist TFT snapshot', error);
         });
         this.emit('tft-snapshot', snapshot);
@@ -48,6 +84,7 @@ export class GameEventsController extends PackageControllerBase {
   public registerToGames(gameIds: number[]): void {
     this._registeredGameIds = gameIds;
     this._gepService.registerGames(gameIds);
+    this.log('GEP game IDs registered', gameIds);
   }
 
   private registerToGepPackageEvents(): void {
@@ -72,10 +109,16 @@ export class GameEventsController extends PackageControllerBase {
 
     this._gepApi.on('new-info-update', (event, gameId, data) => {
       this._gepService.handleTftInfoUpdate(gameId, data);
+      if (gameId === 21570) {
+        this.log('TFT GEP info update received', summarizeGepPayload(data));
+      }
       this.emit('gep-info', { gameId, data });
     });
 
     this._gepApi.on('new-game-event', (event, gameId, data) => {
+      if (gameId === 21570) {
+        this.log('TFT GEP game event received', summarizeGepPayload(data));
+      }
       this.emit('gep-event', { gameId, data });
     });
 
@@ -86,6 +129,10 @@ export class GameEventsController extends PackageControllerBase {
 
     this._gepApi.on('game-exit', (event, gameId, name, pid) => {
       this.log(`Game exit: ${name} (gameId: ${gameId}, pid: ${pid})`);
+      if (gameId === 21570) {
+        this._lastLoggedSnapshotRevision = -1;
+        this._recorderPathLogged = false;
+      }
       this._gepService.onGameExit(gameId);
     });
   }
