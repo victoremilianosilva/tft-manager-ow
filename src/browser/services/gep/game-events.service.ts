@@ -73,10 +73,8 @@ export class GameEventsService extends EventEmitter {
       !this._tftSnapshotManager
     ) return;
 
-    this.emit(
-      'tft-snapshot',
-      this._tftSnapshotManager.applyInfoUpdate(data),
-    );
+    const snapshot = this._tftSnapshotManager.applyInfoUpdate(data);
+    if (snapshot) this.emit('tft-snapshot', snapshot);
   }
 
   private async initializeTftCapture(gameId: number): Promise<void> {
