@@ -32,12 +32,30 @@ function parseValue(value: unknown): unknown {
   }
 }
 
+function normalizeValue(value: unknown): unknown {
+  const parsed = parseValue(value);
+  if (Array.isArray(parsed)) return parsed.map(normalizeValue);
+  if (isRecord(parsed)) {
+    const normalized: UnknownRecord = {};
+    for (const [key, nestedValue] of Object.entries(parsed)) {
+      normalized[key] = normalizeValue(nestedValue);
+    }
+    return normalized;
+  }
+  return parsed;
+}
+
 function deepMerge(target: UnknownRecord, source: UnknownRecord): UnknownRecord {
   const result: UnknownRecord = { ...target };
   for (const [key, rawValue] of Object.entries(source)) {
     const value = parseValue(rawValue);
-    if (isRecord(value) && isRecord(result[key])) {
-      result[key] = deepMerge(result[key], value);
+    if (isRecord(value)) {
+      result[key] = deepMerge(
+        isRecord(result[key]) ? result[key] : {},
+        value,
+      );
+    } else if (Array.isArray(value)) {
+      result[key] = value.map(normalizeValue);
     } else {
       result[key] = value;
     }
