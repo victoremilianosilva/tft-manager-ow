@@ -1,12 +1,14 @@
 import { app, ipcMain } from 'electron';
 import { PackageControllerBase } from '../base.controller';
 import { GameEventsService } from '../../services/gep/game-events.service';
+import { TftSnapshotRecorder } from '../../services/gep/tft-snapshot.recorder';
 import { OverwolfGameEventPackage } from '@overwolf/ow-electron-packages-types';
 
 /** Connects Overwolf GEP events to the TFT capture service. */
 export class GameEventsController extends PackageControllerBase {
   private _gepService: GameEventsService;
   private _gepApi: OverwolfGameEventPackage;
+  private _snapshotRecorder: TftSnapshotRecorder;
   private _registeredGameIds: number[] = [];
 
   constructor() {
@@ -19,11 +21,15 @@ export class GameEventsController extends PackageControllerBase {
     this._gepApi = app.overwolf.packages.gep;
     if (!this._gepService) {
       this._gepService = new GameEventsService(this._gepApi);
+      this._snapshotRecorder = new TftSnapshotRecorder();
       this._gepService.on('tft-features-ready', details => {
         this.log('TFT GEP features configured', details);
         this.emit('tft-features-ready', details);
       });
       this._gepService.on('tft-snapshot', snapshot => {
+        void this._snapshotRecorder.record(snapshot).catch(error => {
+          this.error('Failed to persist TFT snapshot', error);
+        });
         this.emit('tft-snapshot', snapshot);
       });
       this._gepService.on('tft-snapshot-incomplete', details => {
@@ -66,7 +72,6 @@ export class GameEventsController extends PackageControllerBase {
 
     this._gepApi.on('new-info-update', (event, gameId, data) => {
       this._gepService.handleTftInfoUpdate(gameId, data);
-      // Preserve the raw GEP event channel for existing diagnostics consumers.
       this.emit('gep-info', { gameId, data });
     });
 
