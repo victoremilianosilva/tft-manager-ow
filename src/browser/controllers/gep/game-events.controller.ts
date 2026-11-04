@@ -3,6 +3,7 @@ import { PackageControllerBase } from '../base.controller';
 import { GameEventsService } from '../../services/gep/game-events.service';
 import { TftSnapshotRecorder } from '../../services/gep/tft-snapshot.recorder';
 import { OverwolfGameEventPackage } from '@overwolf/ow-electron-packages-types';
+import { kGepSupportedGameIds } from '@overwolf/ow-electron-packages-types/gep-supported-games';
 
 function summarizeGepPayload(data: any): Record<string, unknown> {
   if (!data || typeof data !== 'object') return { payloadType: typeof data };
@@ -109,14 +110,14 @@ export class GameEventsController extends PackageControllerBase {
 
     this._gepApi.on('new-info-update', (event, gameId, data) => {
       this._gepService.handleTftInfoUpdate(gameId, data);
-      if (gameId === 21570) {
+      if (gameId === kGepSupportedGameIds.TeamfightTactics) {
         this.log('TFT GEP info update received', summarizeGepPayload(data));
       }
       this.emit('gep-info', { gameId, data });
     });
 
     this._gepApi.on('new-game-event', (event, gameId, data) => {
-      if (gameId === 21570) {
+      if (gameId === kGepSupportedGameIds.TeamfightTactics) {
         this.log('TFT GEP game event received', summarizeGepPayload(data));
       }
       this.emit('gep-event', { gameId, data });
@@ -129,7 +130,7 @@ export class GameEventsController extends PackageControllerBase {
 
     this._gepApi.on('game-exit', (event, gameId, name, pid) => {
       this.log(`Game exit: ${name} (gameId: ${gameId}, pid: ${pid})`);
-      if (gameId === 21570) {
+      if (gameId === kGepSupportedGameIds.TeamfightTactics) {
         this._lastLoggedSnapshotRevision = -1;
         this._recorderPathLogged = false;
       }
