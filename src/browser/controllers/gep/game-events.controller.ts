@@ -3,10 +3,7 @@ import { PackageControllerBase } from '../base.controller';
 import { GameEventsService } from '../../services/gep/game-events.service';
 import { OverwolfGameEventPackage } from '@overwolf/ow-electron-packages-types';
 
-/**
- * Controller for the Game Events Package (GEP).
- * Wires package readiness, IPC handlers, and delegates to the service.
- */
+/** Connects Overwolf GEP events to the TFT capture service. */
 export class GameEventsController extends PackageControllerBase {
   private _gepService: GameEventsService;
   private _gepApi: OverwolfGameEventPackage;
@@ -18,84 +15,84 @@ export class GameEventsController extends PackageControllerBase {
   }
 
   protected onPackageReady(): void {
-    //@ts-ignore
+    // @ts-ignore - Overwolf injects the package API at runtime.
     this._gepApi = app.overwolf.packages.gep;
     if (!this._gepService) {
       this._gepService = new GameEventsService(this._gepApi);
+      this._gepService.on('tft-features-ready', details => {
+        this.log('TFT GEP features configured', details);
+        this.emit('tft-features-ready', details);
+      });
+      this._gepService.on('tft-snapshot', snapshot => {
+        this.emit('tft-snapshot', snapshot);
+      });
+      this._gepService.on('tft-snapshot-incomplete', details => {
+        this.warn('TFT snapshot baseline is incomplete', details);
+        this.emit('tft-snapshot-incomplete', details);
+      });
+      this._gepService.on('gep-error', details => {
+        this.error('GEP capture error', details);
+      });
     }
 
     this.registerToGepPackageEvents();
     this.emit('ready');
   }
 
-  /**
-   * Registers games for the GEP package.
-   */
-  public registerToGames(gameIds: number[]) {
+  public registerToGames(gameIds: number[]): void {
     this._registeredGameIds = gameIds;
     this._gepService.registerGames(gameIds);
   }
 
-  /**
-   * Register to GEP package events.
-   * This is used to handle the game-detected, elevated-privileges-required, new-info-update, new-game-event, error, and game-exit events.
-   */
-  private registerToGepPackageEvents() {
-    this._gepApi.removeAllListeners();
-
-    this._gepApi.on('game-detected', (event, gameId, name, gameInfo) => {
-      // if (!this._registeredGameIds.includes(gameId)) {
-      //   this.log(`Application is not registered to ${name}, gameId: ${gameId}`);
-      //   return;
-      // }
-      this.log('Game detected', name, gameId, gameInfo);
-      this._gepService.enableDetectedGame(event, gameId);
+  private registerToGepPackageEvents(): void {
+    // Do not call removeAllListeners(): other package consumers may own listeners.
+    this._gepApi.on('game-detected', (event, gameId, name) => {
+      if (!this._registeredGameIds.includes(gameId)) {
+        this.log('Ignoring unregistered GEP game', name, gameId);
+        return;
+      }
+      this.log('Registered game detected', name, gameId);
+      void this._gepService.enableDetectedGame(event, gameId);
     });
 
     this._gepApi.on(
       'elevated-privileges-required',
       (event, gameId, name, pid) => {
-        this.log(
+        this.warn(
           `Elevated privileges required for game ${name} (gameId: ${gameId}, pid: ${pid})`,
         );
-        return;
       },
     );
 
     this._gepApi.on('new-info-update', (event, gameId, data) => {
-      // Emit to consumers (e.g., MainWindowController) can forward to overlay
+      this._gepService.handleTftInfoUpdate(gameId, data);
+      // Preserve the raw GEP event channel for existing diagnostics consumers.
       this.emit('gep-info', { gameId, data });
     });
 
     this._gepApi.on('new-game-event', (event, gameId, data) => {
-      // Emit to consumers (e.g., MainWindowController) can forward to overlay
       this.emit('gep-event', { gameId, data });
     });
 
     this._gepApi.on('error', (event, gameId, error, ...args) => {
-      this.log(`GEP error: ${error} (gameId: ${gameId}, ...args: ${args})`);
-      return;
+      this.error(`GEP error for game ${gameId}: ${error}`, ...args);
+      this.emit('gep-error', { gameId, error, args });
     });
 
     this._gepApi.on('game-exit', (event, gameId, name, pid) => {
       this.log(`Game exit: ${name} (gameId: ${gameId}, pid: ${pid})`);
-
-      this._gepService.onGameExit();
+      this._gepService.onGameExit(gameId);
     });
   }
 
-  //------------------------------QA------------------------------------------
-  private registerToIpc() {
+  private registerToIpc(): void {
     ipcMain.handle('gep-set-required-feature', async () => {
       await this._gepService.setRequiredFeaturesForAllSupportedGames();
       return true;
     });
 
     ipcMain.handle('gep-getInfo', async () => {
-      const result = await this._gepService.getInfoForActiveGame();
-      this.log('getInfo result:', result);
-      return;
+      return this._gepService.getInfoForActiveGame();
     });
   }
-  //------------------------------QA------------------------------------------
 }
