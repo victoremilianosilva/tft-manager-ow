@@ -103,6 +103,24 @@ test('flat GEP update shape is normalized by feature and category', () => {
   });
 });
 
+
+test('getInfo reconciliation removes fields absent from the new baseline', () => {
+  const manager = new TftSnapshotManager(21570);
+  manager.beginReconciliation();
+  manager.finishReconciliation({
+    info: { me: { gold: '42', health: '80' } },
+  });
+
+  manager.beginReconciliation();
+  const snapshot = manager.finishReconciliation({
+    info: { me: { health: '75' } },
+  });
+
+  assert.strictEqual(snapshot.info.me.gold, undefined);
+  assert.strictEqual(snapshot.info.me.health, '75');
+  assert.strictEqual(snapshot.complete, true);
+});
+
 test('reset clears previous match data and revision', () => {
   const manager = new TftSnapshotManager(21570);
   manager.beginReconciliation();
