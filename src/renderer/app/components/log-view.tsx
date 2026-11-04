@@ -32,17 +32,15 @@ const LogView: FC = () => {
   return (
     <section className='logger-section'>
       <SectionHeader
-        title='Logger'
-        description='Track general application output and events'
+        title='TFT GEP Capture'
+        description='Monitoramento em tempo real dos dados recebidos do Overwolf'
       />
-
       <div className="page-inner">
-
         <div className="log-toolbar">
           <input
             className="log-search"
             type="text"
-            placeholder="Search logs..."
+            placeholder="Filtrar logs..."
             value={search}
             onChange={e => setSearch(e.target.value)}
           />
@@ -52,12 +50,7 @@ const LogView: FC = () => {
             </span>
           )}
         </div>
-
-        <div
-          id="TerminalTextArea"
-          className='log-terminal'
-          ref={logRef}
-        >
+        <div id="TerminalTextArea" className='log-terminal' ref={logRef}>
           {filteredMessages.map((entry, i) => (
             <div key={i} className={`log-entry ${entry.type}`}>
               <span>{entry.message}</span>
@@ -68,8 +61,12 @@ const LogView: FC = () => {
               ))}
             </div>
           ))}
+          {filteredMessages.length === 0 && (
+            <div className="log-entry dim">
+              Aguardando eventos do Overwolf/GEP...
+            </div>
+          )}
         </div>
-
         <div className="page-actions">
           <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <input
@@ -78,19 +75,13 @@ const LogView: FC = () => {
               onChange={e => setAutoScroll(e.target.checked)}
               id="autoScrollCheckbox"
             />
-            Auto scroll
+            Rolagem automática
           </label>
-          <button
-            onClick={clearMessages}
-            id="clearTerminalTextAreaBtn"
-            className="btn-secondary"
-          >
-            Clear
+          <button onClick={clearMessages} id="clearTerminalTextAreaBtn" className="btn-secondary">
+            Limpar
           </button>
         </div>
-
       </div>
-
     </section>
   );
 };

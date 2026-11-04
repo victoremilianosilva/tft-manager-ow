@@ -23,19 +23,16 @@ const GlobalStyles = () => (
       ${packageChannelsPageStyles}
 
       #root {
-        height: 100%;
+        height: 100vh;
         display: grid;
         grid-template-areas:
-          "header header"
-          "sidebar main";
+          "header"
+          "main";
         grid-template-rows: 32px 1fr;
-        grid-template-columns: 240px 1fr;
-        height: 100vh;
+        grid-template-columns: 1fr;
       }
 
-      .header {
-        grid-area: header;
-      }
+      .header { grid-area: header; }
 
       .main {
         grid-area: main;
@@ -44,10 +41,6 @@ const GlobalStyles = () => (
         flex-direction: column;
         min-height: 0;
         overflow: hidden;
-
-        &:has(.settings-section) {
-          padding-right: 0;
-        }
       }
 
       .app-page {
@@ -58,33 +51,17 @@ const GlobalStyles = () => (
         overflow: hidden;
       }
 
-      .sidebar {
-        grid-area: sidebar;
-      }
-
       .page-title {
         margin-bottom: 24px;
-
         .title-wrapper {
           display: flex;
           align-items: center;
           gap: var(--space-100);
           margin-bottom: 4px;
         }
-
-        h2 {
-          line-height: var(--font-line-height-800);
-        }
-
-        svg {
-          width: 24px;
-          height: 24px;
-        }
-
-        p {
-          color: var(--color-text-tertiary);
-        }
-
+        h2 { line-height: var(--font-line-height-800); }
+        svg { width: 24px; height: 24px; }
+        p { color: var(--color-text-tertiary); }
         .back-btn {
           display: inline-flex;
           align-items: center;
@@ -94,14 +71,8 @@ const GlobalStyles = () => (
           font-size: var(--font-size-350);
           font-weight: var(--font-weight-regular);
           text-decoration: none;
-
-          .back-icon {
-            transform: rotate(180deg);
-          }
-
-          &:hover {
-            color: var(--color-text-primary);
-          }
+          .back-icon { transform: rotate(180deg); }
+          &:hover { color: var(--color-text-primary); }
         }
       }
 
