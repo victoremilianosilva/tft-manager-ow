@@ -7,12 +7,8 @@ import EventEmitter from 'events';
 import { TftSnapshotManager } from './tft-snapshot.manager';
 
 /**
- * TFT-specific features used by the decision engine.
- *
- * Augments are intentionally excluded: Overwolf's TFT documentation warns
- * that third-party apps must not display augment data under Riot's ToS.
- * live_client_data is also excluded because it exposes the LoL live-client
- * data model rather than the structured TFT board/economy model.
+ * TFT GEP feature allowlist. Augments are intentionally excluded because
+ * Overwolf's TFT documentation warns third-party apps not to display them.
  */
 export const TFT_REQUIRED_FEATURES = [
   'gep_internal',
@@ -29,7 +25,6 @@ export const TFT_REQUIRED_FEATURES = [
   'end_game',
 ] as const;
 
-/** Service responsible for GEP registration and TFT snapshot initialization. */
 export class GameEventsService extends EventEmitter {
   private _gepApi: OverwolfGameEventPackage;
   private _activeGame = 0;
@@ -56,7 +51,6 @@ export class GameEventsService extends EventEmitter {
       if (gameId === kGepSupportedGameIds.TeamfightTactics) {
         await this.initializeTftCapture(gameId);
       } else {
-        // Preserve the sample app's behavior for its other registered games.
         await this._gepApi.setRequiredFeatures(gameId, undefined);
       }
     } catch (error) {
@@ -79,8 +73,10 @@ export class GameEventsService extends EventEmitter {
       !this._tftSnapshotManager
     ) return;
 
-    const snapshot = this._tftSnapshotManager.applyInfoUpdate(data);
-    this.emit('tft-snapshot', snapshot);
+    this.emit(
+      'tft-snapshot',
+      this._tftSnapshotManager.applyInfoUpdate(data),
+    );
   }
 
   private async initializeTftCapture(gameId: number): Promise<void> {
@@ -97,9 +93,8 @@ export class GameEventsService extends EventEmitter {
 
     this._tftSnapshotManager = new TftSnapshotManager(gameId);
     this._tftSnapshotManager.beginReconciliation();
-
-    // Subscribe only to features that this installed GEP version supports.
     await this._gepApi.setRequiredFeatures(gameId, required);
+
     this.emit('tft-features-ready', {
       gameId,
       requested: [...TFT_REQUIRED_FEATURES],
@@ -110,12 +105,14 @@ export class GameEventsService extends EventEmitter {
       ),
     });
 
-    // Deltas may arrive while getInfo() is in flight. SnapshotManager buffers
-    // them and replays them over the baseline so newer updates take priority.
+    // Updates arriving while getInfo() is in flight are replayed after the
+    // baseline so that the newest values take precedence.
     try {
       const baseline = await this._gepApi.getInfo(gameId);
-      const snapshot = this._tftSnapshotManager.finishReconciliation(baseline);
-      this.emit('tft-snapshot', snapshot);
+      this.emit(
+        'tft-snapshot',
+        this._tftSnapshotManager.finishReconciliation(baseline),
+      );
     } catch (error) {
       this._tftSnapshotManager.markIncomplete();
       this.emit('tft-snapshot-incomplete', { gameId, error });
@@ -123,14 +120,42 @@ export class GameEventsService extends EventEmitter {
     }
   }
 
-  /** Current snapshot, exposed for diagnostics and later IPC integration. */
+  /**
+   * Re-read getInfo() and reconcile it with the live delta stream.
+   * This is exposed for diagnostics so a real capture can be checked against
+   * the provider's current stored state without discarding in-flight updates.
+   */
+  public async reconcileTftSnapshot() {
+    if (
+      this._activeGame !== kGepSupportedGameIds.TeamfightTactics ||
+      !this._tftSnapshotManager
+    ) return null;
+
+    this._tftSnapshotManager.beginReconciliation();
+    try {
+      const baseline = await this._gepApi.getInfo(this._activeGame);
+      const snapshot = this._tftSnapshotManager.finishReconciliation(baseline);
+      this.emit('tft-snapshot', snapshot);
+      return snapshot;
+    } catch (error) {
+      this._tftSnapshotManager.markIncomplete();
+      this.emit('tft-snapshot-incomplete', {
+        gameId: this._activeGame,
+        error,
+      });
+      throw error;
+    }
+  }
+
   public getTftSnapshot() {
     return this._tftSnapshotManager?.getSnapshot() ?? null;
   }
 
-  /** Retained as a diagnostic method; do not log raw game data. */
   public async getInfoForActiveGame(): Promise<any> {
     if (this._activeGame === 0) return null;
+    if (this._activeGame === kGepSupportedGameIds.TeamfightTactics) {
+      return this.reconcileTftSnapshot();
+    }
     try {
       return await this._gepApi.getInfo(this._activeGame);
     } catch (error) {
@@ -139,7 +164,6 @@ export class GameEventsService extends EventEmitter {
     }
   }
 
-  /** Kept for the existing QA IPC entry point, but no longer enables all features. */
   public async setRequiredFeaturesForAllSupportedGames(): Promise<void> {
     if (!this._gepApi) return;
     for (const gameId of this._gepGamesId) {
