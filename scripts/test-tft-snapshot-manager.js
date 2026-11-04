@@ -54,6 +54,30 @@ test('reconciliation applies getInfo baseline and marks snapshot complete', () =
   assert.strictEqual(snapshot.revision, 1);
 });
 
+
+test('nested JSON strings inside objects and arrays are normalized recursively', () => {
+  const manager = new TftSnapshotManager(21570);
+  manager.beginReconciliation();
+  const snapshot = manager.finishReconciliation({
+    info: {
+      board: {
+        pieces: '[{"unit":{"name":"TFT_Test","items":"[]"}}]',
+      },
+      me: {
+        details: '{"rank":2,"stats":{"streak":3}}',
+      },
+    },
+  });
+
+  assert.deepStrictEqual(snapshot.info.board.pieces, [
+    { unit: { name: 'TFT_Test', items: [] } },
+  ]);
+  assert.deepStrictEqual(snapshot.info.me.details, {
+    rank: 2,
+    stats: { streak: 3 },
+  });
+});
+
 test('incremental updates preserve fields that did not change', () => {
   const manager = new TftSnapshotManager(21570);
   manager.beginReconciliation();
