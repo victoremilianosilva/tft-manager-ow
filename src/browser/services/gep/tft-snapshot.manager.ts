@@ -34,7 +34,7 @@ function parseValue(value: unknown): unknown {
 
 function normalizeValue(value: unknown): unknown {
   const parsed = parseValue(value);
-  if (Array.isArray(parsed)) return parsed.map(normalizeValue);
+  if (Array.isArray(parsed)) return (parsed as unknown[]).map(normalizeValue);
   if (isRecord(parsed)) {
     const normalized: UnknownRecord = {};
     for (const [key, nestedValue] of Object.entries(parsed)) {
@@ -49,13 +49,14 @@ function deepMerge(target: UnknownRecord, source: UnknownRecord): UnknownRecord 
   const result: UnknownRecord = { ...target };
   for (const [key, rawValue] of Object.entries(source)) {
     const value = parseValue(rawValue);
-    if (isRecord(value)) {
+    // Check arrays before records and cast explicitly for TS 4.7's narrowing.
+    if (Array.isArray(value)) {
+      result[key] = (value as unknown[]).map(normalizeValue);
+    } else if (isRecord(value)) {
       result[key] = deepMerge(
         isRecord(result[key]) ? result[key] : {},
         value,
       );
-    } else if (Array.isArray(value)) {
-      result[key] = value.map(normalizeValue);
     } else {
       result[key] = value;
     }
