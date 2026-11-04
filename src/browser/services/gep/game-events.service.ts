@@ -91,8 +91,9 @@ export class GameEventsService extends EventEmitter {
       );
     }
 
-    this._tftSnapshotManager = new TftSnapshotManager(gameId);
-    this._tftSnapshotManager.beginReconciliation();
+    const manager = new TftSnapshotManager(gameId);
+    this._tftSnapshotManager = manager;
+    manager.beginReconciliation();
     await this._gepApi.setRequiredFeatures(gameId, required);
 
     this.emit('tft-features-ready', {
@@ -109,12 +110,10 @@ export class GameEventsService extends EventEmitter {
     // baseline so that the newest values take precedence.
     try {
       const baseline = await this._gepApi.getInfo(gameId);
-      this.emit(
-        'tft-snapshot',
-        this._tftSnapshotManager.finishReconciliation(baseline),
-      );
+      if (this._tftSnapshotManager !== manager) return;
+      this.emit('tft-snapshot', manager.finishReconciliation(baseline));
     } catch (error) {
-      this._tftSnapshotManager.markIncomplete();
+      if (this._tftSnapshotManager === manager) manager.markIncomplete();
       this.emit('tft-snapshot-incomplete', { gameId, error });
       throw error;
     }
@@ -131,14 +130,19 @@ export class GameEventsService extends EventEmitter {
       !this._tftSnapshotManager
     ) return null;
 
-    this._tftSnapshotManager.beginReconciliation();
+    const manager = this._tftSnapshotManager;
+    const gameId = this._activeGame;
+    manager.beginReconciliation();
     try {
-      const baseline = await this._gepApi.getInfo(this._activeGame);
-      const snapshot = this._tftSnapshotManager.finishReconciliation(baseline);
+      const baseline = await this._gepApi.getInfo(gameId);
+      if (this._tftSnapshotManager !== manager || this._activeGame !== gameId) {
+        return null;
+      }
+      const snapshot = manager.finishReconciliation(baseline);
       this.emit('tft-snapshot', snapshot);
       return snapshot;
     } catch (error) {
-      this._tftSnapshotManager.markIncomplete();
+      if (this._tftSnapshotManager === manager) manager.markIncomplete();
       this.emit('tft-snapshot-incomplete', {
         gameId: this._activeGame,
         error,
