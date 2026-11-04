@@ -92,10 +92,10 @@ export class TftSnapshotManager {
     this.bufferedUpdates = [];
   }
 
-  public applyInfoUpdate(payload: unknown): TftGepSnapshot {
+  public applyInfoUpdate(payload: unknown): TftGepSnapshot | null {
     if (this.reconciling) {
       this.bufferedUpdates.push(payload);
-      return this.getSnapshot();
+      return null;
     }
     this.mergePayload(payload, false);
     return this.getSnapshot();
