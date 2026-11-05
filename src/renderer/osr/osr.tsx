@@ -3,39 +3,37 @@ import { createRoot } from 'react-dom/client';
 import { SvgIcons } from '../app/styles/icons';
 import OverlayWindowStyles from '../app/styles/overlay-window-styles';
 import OverlayWindowHeader from './components/osr-window-header';
-import GEPLogsDisplay from './components/gepLogger';
+import TFTCoachOverlay from './components/tft-coach-overlay';
 import MoreActionsButtons from './components/more-actions-buttons';
 import Ad from '../app/components/ads-tester/ad';
 import OverlayWindowSettings from './components/overlay-window-settings';
-import { GepLogsProvider } from '../app/context/gep-logs-context';
 
 const container = document.getElementById('osr-root');
+if (!container) {
+  throw new Error('OSR root element was not found.');
+}
 
 const root = createRoot(container);
 
 root.render(
-  <GepLogsProvider>
-    <div className="overlay-window-wrapper">
-      <SvgIcons />
-      <OverlayWindowStyles />
+  <div className="overlay-window-wrapper">
+    <SvgIcons />
+    <OverlayWindowStyles />
+    <OverlayWindowHeader />
 
-      <OverlayWindowHeader />
+    <main>
+      <TFTCoachOverlay />
+      <OverlayWindowSettings />
+      <Ad
+        adSize={[400, 300]}
+        id={'ad-container'}
+        adName={'Ad container 400x300'}
+        adViewIsActive={false}
+      />
 
-      <main>
-        <GEPLogsDisplay />
-        <OverlayWindowSettings />
-
-        <Ad
-          adSize={[400, 300]}
-          id={'ad-container'}
-          adName={'Ad container 400x300'}
-          adViewIsActive={false}
-        />
-
-        {/* QA */}
-        <MoreActionsButtons />
-        {/* QA */}
-      </main>
-    </div>
-  </GepLogsProvider>,
+      {/* QA */}
+      <MoreActionsButtons />
+      {/* QA */}
+    </main>
+  </div>,
 );
