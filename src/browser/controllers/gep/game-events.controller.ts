@@ -131,7 +131,7 @@ export class GameEventsController extends PackageControllerBase {
       if (gameId === kGepSupportedGameIds.TeamfightTactics) {
         void this._snapshotRecorder.recordGepEvent(gameId, data).catch(error => {
           this.error('Failed to persist raw TFT GEP game event', error);
-          void this._snapshotRecorder.recordError(gameId, error).catch(() => undefined);
+          void this._snapshotRecorder.recordError(gameId, error, args).catch(() => undefined);
         });
         this.log('TFT GEP game event', sanitizeTftPayload(data));
       }
