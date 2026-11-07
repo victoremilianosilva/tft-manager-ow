@@ -1,7 +1,7 @@
 import { app, ipcMain } from 'electron';
 import { PackageControllerBase } from '../base.controller';
 import { GameEventsService } from '../../services/gep/game-events.service';
-import { TftSnapshotRecorder } from '../../services/gep/tft-snapshot.recorder';
+import { TftSnapshotRecorder, sanitizeTftPayload } from '../../services/gep/tft-snapshot.recorder';
 import { OverwolfGameEventPackage } from '@overwolf/ow-electron-packages-types';
 import { kGepSupportedGameIds } from '@overwolf/ow-electron-packages-types/gep-supported-games';
 
@@ -107,10 +107,10 @@ export class GameEventsController extends PackageControllerBase {
           this.error('Failed to persist raw TFT GEP info update', error);
           void this._snapshotRecorder.recordError(gameId, error).catch(() => undefined);
         });
-        this.log('TFT GEP info update', data);
+        this.log('TFT GEP info update', sanitizeTftPayload(data));
       }
       this._gepService.handleTftInfoUpdate(gameId, data);
-      this.emit('gep-info', { gameId, data });
+      this.emit('gep-info', { gameId, data: gameId === kGepSupportedGameIds.TeamfightTactics ? sanitizeTftPayload(data) : data });
     });
 
     this._gepApi.on('new-game-event', (event, gameId, data) => {
@@ -119,9 +119,9 @@ export class GameEventsController extends PackageControllerBase {
           this.error('Failed to persist raw TFT GEP game event', error);
           void this._snapshotRecorder.recordError(gameId, error).catch(() => undefined);
         });
-        this.log('TFT GEP game event', data);
+        this.log('TFT GEP game event', sanitizeTftPayload(data));
       }
-      this.emit('gep-event', { gameId, data });
+      this.emit('gep-event', { gameId, data: gameId === kGepSupportedGameIds.TeamfightTactics ? sanitizeTftPayload(data) : data });
     });
 
     this._gepApi.on('error', (event, gameId, error, ...args) => {
