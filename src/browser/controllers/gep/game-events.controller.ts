@@ -60,6 +60,9 @@ export class GameEventsController extends PackageControllerBase {
       this._gepService.on('gep-error', details => {
         this.error('GEP capture error', details);
       });
+      this._gepService.on('gep-retry', details => {
+        this.warn('Retrying TFT GEP initialization', details);
+      });
     }
 
     if (!this._gepListenersRegistered) {
