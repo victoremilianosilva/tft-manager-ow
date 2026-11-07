@@ -67,8 +67,8 @@ const { TftSnapshotRecorder } = moduleObject.exports;
   assert.strictEqual(appended.length, 3, 'queue should recover after a failed append');
   assert.strictEqual(JSON.parse(appended[2]).payload.event, 'after_failure');
 
-  process.stdout.write('All TFT capture recorder tests passed.\\n');
+  process.stdout.write('All TFT capture recorder tests passed.\n');
 })().catch(error => {
-  process.stderr.write(String(error && error.stack || error) + '\\n');
+  process.stderr.write(String(error && error.stack || error) + '\n');
   process.exitCode = 1;
 });
