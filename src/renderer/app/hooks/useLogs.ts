@@ -14,8 +14,8 @@ export function useLogs() {
   const newLogMessage = (message: string, type: LogType = 'info', args?: any[]) => {
     setLogMessages((prev) => {
       const next = [...prev, { message, type, args }];
-      // Keep the live monitor bounded during long TFT sessions.
-      return next.length > 2000 ? next.slice(-2000) : next;
+      // Keep every GEP event visible for the full capture session.
+      return next;
     });
   };
 
