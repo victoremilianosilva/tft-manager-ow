@@ -3,14 +3,54 @@ import path from 'path';
 import { app } from 'electron';
 import { TftGepSnapshot } from './tft-snapshot.manager';
 
+export type TftCaptureRecordKind =
+  | 'snapshot'
+  | 'info_update'
+  | 'game_event'
+  | 'lifecycle'
+  | 'capture_error';
+
+export interface TftCaptureRecord {
+  kind: TftCaptureRecordKind;
+  gameId: number;
+  payload: unknown;
+  capturedAt?: string;
+  matchId?: string | null;
+}
+
+function findMatchId(value: unknown, depth = 0): string | null {
+  if (!value || typeof value !== 'object' || depth > 5) return null;
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = findMatchId(item, depth + 1);
+      if (found) return found;
+    }
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  for (const key of ['match_id', 'matchId', 'game_id', 'gameId']) {
+    const candidate = record[key];
+    if (typeof candidate === 'string' && candidate.trim()) return candidate.trim();
+    if (typeof candidate === 'number' && Number.isFinite(candidate)) return String(candidate);
+  }
+  for (const nested of Object.values(record)) {
+    const found = findMatchId(nested, depth + 1);
+    if (found) return found;
+  }
+  return null;
+}
+
 /**
- * Persists one JSON snapshot per line for offline replay and capture audits.
- * Files are kept under the application's userData directory, not in logs.
+ * Append-only JSONL recorder. Every GEP info delta and game event is stored
+ * independently, alongside reconciled snapshots. A rejected write never
+ * poisons the queue: later records still get an attempt.
  */
 export class TftSnapshotRecorder {
   private readonly outputDirectory: string;
   private readonly outputFile: string;
   private writeQueue: Promise<void> = Promise.resolve();
+  private lastMatchId: string | null = null;
 
   constructor() {
     this.outputDirectory = path.join(app.getPath('userData'), 'tft-snapshots');
@@ -22,8 +62,53 @@ export class TftSnapshotRecorder {
   }
 
   public record(snapshot: TftGepSnapshot): Promise<void> {
-    const line = `${JSON.stringify(snapshot)}\n`;
-    this.writeQueue = this.writeQueue.then(async () => {
+    return this.recordEntry({
+      kind: 'snapshot',
+      gameId: snapshot.gameId,
+      payload: snapshot,
+      capturedAt: snapshot.capturedAt,
+    });
+  }
+
+  public recordGepInfo(gameId: number, payload: unknown): Promise<void> {
+    return this.recordEntry({ kind: 'info_update', gameId, payload });
+  }
+
+  public recordGepEvent(gameId: number, payload: unknown): Promise<void> {
+    return this.recordEntry({ kind: 'game_event', gameId, payload });
+  }
+
+  public recordLifecycle(gameId: number, event: string, payload?: unknown): Promise<void> {
+    return this.recordEntry({
+      kind: 'lifecycle',
+      gameId,
+      payload: { event, data: payload ?? null },
+    });
+  }
+
+  public recordError(gameId: number, error: unknown): Promise<void> {
+    return this.recordEntry({
+      kind: 'capture_error',
+      gameId,
+      payload: { message: error instanceof Error ? error.message : String(error) },
+    });
+  }
+
+  public recordEntry(record: TftCaptureRecord): Promise<void> {
+    const matchId = findMatchId(record.payload) ?? this.lastMatchId;
+    if (matchId) this.lastMatchId = matchId;
+    const line = `${JSON.stringify({
+      schemaVersion: 2,
+      recordType: record.kind,
+      capturedAt: record.capturedAt ?? new Date().toISOString(),
+      gameId: record.gameId,
+      matchId,
+      payload: record.payload,
+    })}\n`;
+
+    // Recover the chain after a failed append so a transient filesystem error
+    // does not prevent all subsequent events from being persisted.
+    this.writeQueue = this.writeQueue.catch(() => undefined).then(async () => {
       await fs.promises.mkdir(this.outputDirectory, { recursive: true });
       await fs.promises.appendFile(this.outputFile, line, { encoding: 'utf8' });
     });
