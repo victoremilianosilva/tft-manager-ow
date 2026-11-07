@@ -18,7 +18,7 @@ export interface TftCaptureRecord {
   matchId?: string | null;
 }
 
-function sanitizeTftPayload(value: unknown): unknown {
+export function sanitizeTftPayload(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(sanitizeTftPayload);
   if (!value || typeof value !== 'object') return value;
 
