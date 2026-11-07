@@ -17,6 +17,7 @@ import { GameEventsController } from './gep/game-events.controller';
 import { IRecorderInformation } from '../../common/recorder/recorder-information';
 import fs from 'fs';
 import { kGameIds } from '@overwolf/ow-electron-packages-types/game-list';
+import { kGepSupportedGameIds } from '@overwolf/ow-electron-packages-types/gep-supported-games';
 import { OverlayChannels, PackageChannelIpcChannels } from '../../common/channels/channels';
 /**
  *
@@ -75,10 +76,16 @@ export class MainWindowController {
 
   private gepOnInfo(payload: { gameId: number; data: any }) {
     this.overlayController.sendGepInfoToWindows(payload);
+    if (payload.gameId === kGepSupportedGameIds.TeamfightTactics && this.browserWindow && !this.browserWindow.isDestroyed()) {
+      this.browserWindow.webContents.send('gep-info', payload);
+    }
   }
 
   private gepOnEvent(payload: { gameId: number; data: any }) {
     this.overlayController.sendGepEventToWindows(payload);
+    if (payload.gameId === kGepSupportedGameIds.TeamfightTactics && this.browserWindow && !this.browserWindow.isDestroyed()) {
+      this.browserWindow.webContents.send('gep-event', payload);
+    }
 
     if (
       payload.gameId === kGameIds.LeagueofLegends ||
