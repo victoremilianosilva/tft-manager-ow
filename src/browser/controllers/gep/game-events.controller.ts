@@ -14,7 +14,6 @@ export class GameEventsController extends PackageControllerBase {
   private _lastLoggedSnapshotRevision = -1;
   private _recorderPathLogged = false;
   private _gepListenersRegistered = false;
-  private _gepListenersRegistered = false;
 
   constructor() {
     super('gep');
@@ -64,10 +63,7 @@ export class GameEventsController extends PackageControllerBase {
     }
 
     if (!this._gepListenersRegistered) {
-      if (!this._gepListenersRegistered) {
       this.registerToGepPackageEvents();
-      this._gepListenersRegistered = true;
-    }
       this._gepListenersRegistered = true;
     }
     this.emit('ready');
