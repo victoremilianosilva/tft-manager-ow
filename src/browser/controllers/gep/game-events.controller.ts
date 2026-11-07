@@ -23,6 +23,7 @@ export class GameEventsController extends PackageControllerBase {
   protected onPackageReady(): void {
     // @ts-ignore - Overwolf injects the package API at runtime.
     this._gepApi = app.overwolf.packages.gep;
+    this.log('GEP package ready; attaching TFT detection listeners');
     if (!this._gepService) {
       this._gepService = new GameEventsService(this._gepApi);
       this._snapshotRecorder = new TftSnapshotRecorder();
@@ -92,16 +93,33 @@ export class GameEventsController extends PackageControllerBase {
     this._registeredGameIds = gameIds;
     this._gepService.registerGames(gameIds);
     this.log('GEP game IDs registered', gameIds);
+    this.log('TFT detection registration status', {
+      tftGameId: kGepSupportedGameIds.TeamfightTactics,
+      tftRegistered: gameIds.includes(kGepSupportedGameIds.TeamfightTactics),
+      listenerCounts: {
+        gameDetected: this._gepApi.listenerCount('game-detected'),
+        gameExit: this._gepApi.listenerCount('game-exit'),
+        infoUpdate: this._gepApi.listenerCount('new-info-update'),
+        gameEvent: this._gepApi.listenerCount('new-game-event'),
+      },
+    });
+    void this._gepApi.getSupportedGames().then(games => {
+      this.log('GEP supported games reported by provider', games);
+    }).catch(error => {
+      this.error('Unable to query GEP supported games', error);
+    });
   }
 
   private registerToGepPackageEvents(): void {
     // Do not call removeAllListeners(): other package consumers may own listeners.
     this._gepApi.on('game-detected', (event, gameId, name) => {
+      this.log('GEP game-detected event received', { gameId, name, registered: this._registeredGameIds.includes(gameId) });
       if (!this._registeredGameIds.includes(gameId)) {
         this.log('Ignoring unregistered GEP game', name, gameId);
         return;
       }
       this.log('Registered game detected', name, gameId);
+      if (gameId === kGepSupportedGameIds.TeamfightTactics) this.log('TFT CLIENT IDENTIFIED BY GEP', { name, gameId });
       if (gameId === kGepSupportedGameIds.TeamfightTactics) {
         void this._snapshotRecorder.recordLifecycle(gameId, 'game-detected', { name });
       }
