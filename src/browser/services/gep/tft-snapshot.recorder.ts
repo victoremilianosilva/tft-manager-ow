@@ -44,7 +44,7 @@ function findMatchId(value: unknown, depth = 0): string | null {
   }
 
   const record = value as Record<string, unknown>;
-  for (const key of ['match_id', 'matchId', 'game_id', 'gameId']) {
+  for (const key of ['match_id', 'matchId']) {
     const candidate = record[key];
     if (typeof candidate === 'string' && candidate.trim()) return candidate.trim();
     if (typeof candidate === 'number' && Number.isFinite(candidate)) return String(candidate);
@@ -94,11 +94,14 @@ export class TftSnapshotRecorder {
   }
 
   public recordLifecycle(gameId: number, event: string, payload?: unknown): Promise<void> {
-    return this.recordEntry({
+    if (event === 'game-detected') this.lastMatchId = null;
+    const pending = this.recordEntry({
       kind: 'lifecycle',
       gameId,
       payload: { event, data: payload ?? null },
     });
+    if (event === 'game-exit') this.lastMatchId = null;
+    return pending;
   }
 
   public recordError(gameId: number, error: unknown): Promise<void> {
