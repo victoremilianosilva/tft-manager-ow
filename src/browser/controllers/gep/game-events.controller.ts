@@ -119,7 +119,7 @@ export class GameEventsController extends PackageControllerBase {
       if (gameId === kGepSupportedGameIds.TeamfightTactics) {
         void this._snapshotRecorder.recordGepInfo(gameId, data).catch(error => {
           this.error('Failed to persist raw TFT GEP info update', error);
-          void this._snapshotRecorder.recordError(gameId, error, args).catch(() => undefined);
+          void this._snapshotRecorder.recordError(gameId, error).catch(() => undefined);
         });
         this.log('TFT GEP info update', sanitizeTftPayload(data));
       }
@@ -141,7 +141,7 @@ export class GameEventsController extends PackageControllerBase {
     this._gepApi.on('error', (event, gameId, error, ...args) => {
       this.error(`GEP error for game ${gameId}: ${error}`, ...args);
       if (gameId === kGepSupportedGameIds.TeamfightTactics) {
-        void this._snapshotRecorder.recordError(gameId, error).catch(() => undefined);
+        void this._snapshotRecorder.recordError(gameId, error, args).catch(() => undefined);
       }
       this.emit('gep-error', { gameId, error, args });
     });
