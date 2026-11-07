@@ -65,6 +65,11 @@ export class GameEventsController extends PackageControllerBase {
       });
       this._gepService.on('gep-error', details => {
         this.error('GEP capture error', details);
+        void this._snapshotRecorder.recordError(
+          kGepSupportedGameIds.TeamfightTactics,
+          (details as any)?.error ?? 'GEP capture error',
+          details,
+        ).catch(() => undefined);
       });
       this._gepService.on('gep-retry', details => {
         this.warn('Retrying TFT GEP initialization', details);
