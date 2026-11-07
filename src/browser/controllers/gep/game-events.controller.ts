@@ -28,6 +28,7 @@ export class GameEventsController extends PackageControllerBase {
       this._snapshotRecorder = new TftSnapshotRecorder();
       this._gepService.on('tft-features-ready', details => {
         this.log('TFT GEP features configured', details);
+        void this._snapshotRecorder.recordLifecycle(kGepSupportedGameIds.TeamfightTactics, 'features-ready', details);
         this.emit('tft-features-ready', details);
       });
       this._gepService.on('tft-snapshot', snapshot => {
@@ -55,6 +56,11 @@ export class GameEventsController extends PackageControllerBase {
       });
       this._gepService.on('tft-snapshot-incomplete', details => {
         this.warn('TFT snapshot baseline is incomplete', details);
+        void this._snapshotRecorder.recordError(
+          kGepSupportedGameIds.TeamfightTactics,
+          'TFT snapshot baseline is incomplete',
+          details,
+        ).catch(() => undefined);
         this.emit('tft-snapshot-incomplete', details);
       });
       this._gepService.on('gep-error', details => {
@@ -62,6 +68,11 @@ export class GameEventsController extends PackageControllerBase {
       });
       this._gepService.on('gep-retry', details => {
         this.warn('Retrying TFT GEP initialization', details);
+        void this._snapshotRecorder.recordLifecycle(
+          kGepSupportedGameIds.TeamfightTactics,
+          'feature-initialization-retry',
+          details,
+        ).catch(() => undefined);
       });
     }
 
@@ -108,7 +119,7 @@ export class GameEventsController extends PackageControllerBase {
       if (gameId === kGepSupportedGameIds.TeamfightTactics) {
         void this._snapshotRecorder.recordGepInfo(gameId, data).catch(error => {
           this.error('Failed to persist raw TFT GEP info update', error);
-          void this._snapshotRecorder.recordError(gameId, error).catch(() => undefined);
+          void this._snapshotRecorder.recordError(gameId, error, args).catch(() => undefined);
         });
         this.log('TFT GEP info update', sanitizeTftPayload(data));
       }
