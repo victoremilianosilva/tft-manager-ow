@@ -18,6 +18,21 @@ export interface TftCaptureRecord {
   matchId?: string | null;
 }
 
+function sanitizeTftPayload(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sanitizeTftPayload);
+  if (!value || typeof value !== 'object') return value;
+
+  const sanitized: Record<string, unknown> = {};
+  for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
+    if (key.toLowerCase() === 'augments' || key.toLowerCase() === 'augment_choices') {
+      sanitized[key] = '[redacted: Overwolf TFT GEP display restriction]';
+    } else {
+      sanitized[key] = sanitizeTftPayload(nested);
+    }
+  }
+  return sanitized;
+}
+
 function findMatchId(value: unknown, depth = 0): string | null {
   if (!value || typeof value !== 'object' || depth > 5) return null;
   if (Array.isArray(value)) {
@@ -95,7 +110,8 @@ export class TftSnapshotRecorder {
   }
 
   public recordEntry(record: TftCaptureRecord): Promise<void> {
-    const matchId = findMatchId(record.payload) ?? this.lastMatchId;
+    const safePayload = sanitizeTftPayload(record.payload);
+    const matchId = record.matchId ?? findMatchId(safePayload) ?? this.lastMatchId;
     if (matchId) this.lastMatchId = matchId;
     const line = `${JSON.stringify({
       schemaVersion: 2,
@@ -103,7 +119,7 @@ export class TftSnapshotRecorder {
       capturedAt: record.capturedAt ?? new Date().toISOString(),
       gameId: record.gameId,
       matchId,
-      payload: record.payload,
+      payload: safePayload,
     })}\n`;
 
     // Recover the chain after a failed append so a transient filesystem error
