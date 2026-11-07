@@ -24,6 +24,8 @@ import { OverlayChannels, PackageChannelIpcChannels } from '../../common/channel
  */
 export class MainWindowController {
   private browserWindow: BrowserWindow | null = null;
+  private windowReady = false;
+  private pendingLogMessages: Array<{ message: string; type: string; args?: any[] }> = [];
   private packageVersions: Record<string, string> = {};
   private packageInitFailures: Record<string, string> = {};
 
@@ -62,16 +64,18 @@ export class MainWindowController {
    */
   public printLogMessage(payload: string | { message: string; type: string; args?: any[] }, ...rest: any[]) {
     if (this.browserWindow?.isDestroyed()) return;
-
     const message = typeof payload === 'string' ? payload : payload.message;
     const type = typeof payload === 'string' ? 'info' : payload.type;
     const args = typeof payload === 'string' ? rest : (payload.args ?? []);
-
-    this.browserWindow?.webContents?.send('console-message', {
-      message,
-      type,
-      args,
-    });
+    const entry = { message, type, args };
+    // Package-ready and game-detection events can arrive before the renderer
+    // finishes loading. Buffer them instead of silently dropping diagnostics.
+    if (!this.windowReady || !this.browserWindow?.webContents) {
+      this.pendingLogMessages.push(entry);
+      if (this.pendingLogMessages.length > 1500) this.pendingLogMessages.shift();
+      return;
+    }
+    this.browserWindow.webContents.send('console-message', entry);
   }
 
   private gepOnInfo(payload: { gameId: number; data: any }) {
@@ -227,7 +231,12 @@ export class MainWindowController {
     this.browserWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
 
 
-    this.browserWindow.webContents.once('did-finish-load', () => {  
+    this.browserWindow.webContents.once('did-finish-load', () => {
+      this.windowReady = true;
+      const buffered = this.pendingLogMessages.splice(0);
+      for (const entry of buffered) {
+        this.browserWindow?.webContents?.send('console-message', entry);
+      }
       this.onWindowReady();
     });
   }
