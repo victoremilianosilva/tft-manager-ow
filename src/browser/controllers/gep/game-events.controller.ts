@@ -95,6 +95,9 @@ export class GameEventsController extends PackageControllerBase {
         this.warn(
           `Elevated privileges required for game ${name} (gameId: ${gameId}, pid: ${pid})`,
         );
+        if (gameId === kGepSupportedGameIds.TeamfightTactics) {
+          void this._snapshotRecorder.recordLifecycle(gameId, 'elevated-privileges-required', { name, pid });
+        }
       },
     );
 
@@ -123,6 +126,9 @@ export class GameEventsController extends PackageControllerBase {
 
     this._gepApi.on('error', (event, gameId, error, ...args) => {
       this.error(`GEP error for game ${gameId}: ${error}`, ...args);
+      if (gameId === kGepSupportedGameIds.TeamfightTactics) {
+        void this._snapshotRecorder.recordError(gameId, error).catch(() => undefined);
+      }
       this.emit('gep-error', { gameId, error, args });
     });
 
