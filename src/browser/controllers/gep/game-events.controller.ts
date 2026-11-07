@@ -29,7 +29,7 @@ export class GameEventsController extends PackageControllerBase {
   private _snapshotRecorder: TftSnapshotRecorder;
   private _registeredGameIds: number[] = [];
   private _lastLoggedSnapshotRevision = -1;
-  private _recorderPathLogged = false;
+  private _recorderPathLogged = false;\n  private _gepListenersRegistered = false;
 
   constructor() {
     super('gep');
@@ -78,7 +78,7 @@ export class GameEventsController extends PackageControllerBase {
       });
     }
 
-    this.registerToGepPackageEvents();
+    if (!this._gepListenersRegistered) {\n      this.registerToGepPackageEvents();\n      this._gepListenersRegistered = true;\n    }
     this.emit('ready');
   }
 
