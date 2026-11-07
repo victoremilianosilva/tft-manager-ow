@@ -104,11 +104,14 @@ export class TftSnapshotRecorder {
     return pending;
   }
 
-  public recordError(gameId: number, error: unknown): Promise<void> {
+  public recordError(gameId: number, error: unknown, details?: unknown): Promise<void> {
     return this.recordEntry({
       kind: 'capture_error',
       gameId,
-      payload: { message: error instanceof Error ? error.message : String(error) },
+      payload: {
+        message: error instanceof Error ? error.message : String(error),
+        details: details ?? null,
+      },
     });
   }
 
