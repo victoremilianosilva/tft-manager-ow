@@ -5,23 +5,6 @@ import { TftSnapshotRecorder } from '../../services/gep/tft-snapshot.recorder';
 import { OverwolfGameEventPackage } from '@overwolf/ow-electron-packages-types';
 import { kGepSupportedGameIds } from '@overwolf/ow-electron-packages-types/gep-supported-games';
 
-function summarizeGepPayload(data: any): Record<string, unknown> {
-  if (!data || typeof data !== 'object') return { payloadType: typeof data };
-
-  const summary: Record<string, unknown> = {
-    keys: Object.keys(data).slice(0, 12),
-  };
-  for (const key of ['feature', 'category', 'key', 'name', 'event', 'game_flow']) {
-    if (data[key] !== undefined && typeof data[key] !== 'object') {
-      summary[key] = data[key];
-    }
-  }
-  if (data.info && typeof data.info === 'object') {
-    summary.infoFeatures = Object.keys(data.info);
-  }
-  return summary;
-}
-
 /** Connects Overwolf GEP events to the TFT capture service. */
 export class GameEventsController extends PackageControllerBase {
   private _gepService: GameEventsService;
@@ -29,7 +12,9 @@ export class GameEventsController extends PackageControllerBase {
   private _snapshotRecorder: TftSnapshotRecorder;
   private _registeredGameIds: number[] = [];
   private _lastLoggedSnapshotRevision = -1;
-  private _recorderPathLogged = false;\n  private _gepListenersRegistered = false;
+  private _recorderPathLogged = false;
+  private _gepListenersRegistered = false;
+  private _gepListenersRegistered = false;
 
   constructor() {
     super('gep');
@@ -78,7 +63,13 @@ export class GameEventsController extends PackageControllerBase {
       });
     }
 
-    if (!this._gepListenersRegistered) {\n      this.registerToGepPackageEvents();\n      this._gepListenersRegistered = true;\n    }
+    if (!this._gepListenersRegistered) {
+      if (!this._gepListenersRegistered) {
+      this.registerToGepPackageEvents();
+      this._gepListenersRegistered = true;
+    }
+      this._gepListenersRegistered = true;
+    }
     this.emit('ready');
   }
 
@@ -96,6 +87,9 @@ export class GameEventsController extends PackageControllerBase {
         return;
       }
       this.log('Registered game detected', name, gameId);
+      if (gameId === kGepSupportedGameIds.TeamfightTactics) {
+        void this._snapshotRecorder.recordLifecycle(gameId, 'game-detected', { name });
+      }
       void this._gepService.enableDetectedGame(event, gameId);
     });
 
@@ -109,16 +103,24 @@ export class GameEventsController extends PackageControllerBase {
     );
 
     this._gepApi.on('new-info-update', (event, gameId, data) => {
-      this._gepService.handleTftInfoUpdate(gameId, data);
       if (gameId === kGepSupportedGameIds.TeamfightTactics) {
-        this.log('TFT GEP info update received', summarizeGepPayload(data));
+        void this._snapshotRecorder.recordGepInfo(gameId, data).catch(error => {
+          this.error('Failed to persist raw TFT GEP info update', error);
+          void this._snapshotRecorder.recordError(gameId, error).catch(() => undefined);
+        });
+        this.log('TFT GEP info update', data);
       }
+      this._gepService.handleTftInfoUpdate(gameId, data);
       this.emit('gep-info', { gameId, data });
     });
 
     this._gepApi.on('new-game-event', (event, gameId, data) => {
       if (gameId === kGepSupportedGameIds.TeamfightTactics) {
-        this.log('TFT GEP game event received', summarizeGepPayload(data));
+        void this._snapshotRecorder.recordGepEvent(gameId, data).catch(error => {
+          this.error('Failed to persist raw TFT GEP game event', error);
+          void this._snapshotRecorder.recordError(gameId, error).catch(() => undefined);
+        });
+        this.log('TFT GEP game event', data);
       }
       this.emit('gep-event', { gameId, data });
     });
@@ -131,6 +133,7 @@ export class GameEventsController extends PackageControllerBase {
     this._gepApi.on('game-exit', (event, gameId, name, pid) => {
       this.log(`Game exit: ${name} (gameId: ${gameId}, pid: ${pid})`);
       if (gameId === kGepSupportedGameIds.TeamfightTactics) {
+        void this._snapshotRecorder.recordLifecycle(gameId, 'game-exit', { name, pid });
         this._lastLoggedSnapshotRevision = -1;
         this._recorderPathLogged = false;
       }
