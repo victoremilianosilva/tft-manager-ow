@@ -49,7 +49,7 @@ export class GameEventsService extends EventEmitter {
 
     try {
       if (gameId === kGepSupportedGameIds.TeamfightTactics) {
-        await this.initializeTftCapture(gameId);
+        await this.initializeTftCaptureWithRetry(gameId);
       } else {
         await this._gepApi.setRequiredFeatures(gameId, undefined);
       }
@@ -75,6 +75,23 @@ export class GameEventsService extends EventEmitter {
 
     const snapshot = this._tftSnapshotManager.applyInfoUpdate(data);
     if (snapshot) this.emit('tft-snapshot', snapshot);
+  }
+
+  private async initializeTftCaptureWithRetry(gameId: number, attempts = 3): Promise<void> {
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= attempts; attempt += 1) {
+      try {
+        await this.initializeTftCapture(gameId);
+        return;
+      } catch (error) {
+        lastError = error;
+        this.emit('gep-retry', { gameId, attempt, attempts, error });
+        if (attempt < attempts) {
+          await new Promise(resolve => setTimeout(resolve, 500 * attempt));
+        }
+      }
+    }
+    throw lastError;
   }
 
   private async initializeTftCapture(gameId: number): Promise<void> {
@@ -170,7 +187,7 @@ export class GameEventsService extends EventEmitter {
     if (!this._gepApi) return;
     for (const gameId of this._gepGamesId) {
       if (gameId === kGepSupportedGameIds.TeamfightTactics) {
-        await this.initializeTftCapture(gameId);
+        await this.initializeTftCaptureWithRetry(gameId);
       }
     }
   }

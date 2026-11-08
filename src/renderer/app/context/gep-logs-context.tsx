@@ -13,8 +13,8 @@ export const GepLogsProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [logs, setLogs] = useState<string[]>([]);
 
   const addLog = useCallback((message: string) => {
-    const separator = '-----------------------------------';
-    setLogs(prev => [...prev, separator, message]);
+    const timestamp = new Date().toISOString();
+    setLogs(prev => [...prev, `[${timestamp}] ${message}`]);
   }, []);
 
   const clearLogs = useCallback(() => {
@@ -24,17 +24,17 @@ export const GepLogsProvider: React.FC<{ children: React.ReactNode }> = ({ child
   useEffect(() => {
     const onGepInfo = (_event: any, payload: { gameId: number; data: any }) => {
       try {
-        addLog(`[gep-game-info]: ${JSON.stringify(payload?.data)}`);
+        if (payload?.gameId === 21570) addLog(`[TFT][gep-info] ${JSON.stringify(payload.data)}`);
       } catch {
-        addLog(`[gep-game-info]: ${String(payload)}`);
+        if (payload?.gameId === 21570) addLog(`[TFT][gep-info] ${String(payload)}`);
       }
     };
 
     const onGepEvent = (_event: any, payload: { gameId: number; data: any }) => {
       try {
-        addLog(`[gep-game-event]: ${JSON.stringify(payload?.data)}`);
+        if (payload?.gameId === 21570) addLog(`[TFT][gep-event] ${JSON.stringify(payload.data)}`);
       } catch {
-        addLog(`[gep-game-event]: ${String(payload)}`);
+        if (payload?.gameId === 21570) addLog(`[TFT][gep-event] ${String(payload)}`);
       }
     };
 
