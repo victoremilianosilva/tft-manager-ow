@@ -4,6 +4,7 @@ import { GameEventsService } from '../../services/gep/game-events.service';
 import { TftSnapshotRecorder, sanitizeTftPayload } from '../../services/gep/tft-snapshot.recorder';
 import { OverwolfGameEventPackage } from '@overwolf/ow-electron-packages-types';
 import { kGepSupportedGameIds } from '@overwolf/ow-electron-packages-types/gep-supported-games';
+import { normalizeGepGameId } from '../../services/gep/tft-game-id';
 
 /** Connects Overwolf GEP events to the TFT capture service. */
 export class GameEventsController extends PackageControllerBase {
@@ -112,33 +113,54 @@ export class GameEventsController extends PackageControllerBase {
 
   private registerToGepPackageEvents(): void {
     // Do not call removeAllListeners(): other package consumers may own listeners.
-    this._gepApi.on('game-detected', (event, gameId, name) => {
-      this.log('GEP game-detected event received', { gameId, name, registered: this._registeredGameIds.includes(gameId) });
-      if (!this._registeredGameIds.includes(gameId)) {
-        this.log('Ignoring unregistered GEP game', name, gameId);
+    this._gepApi.on('game-detected', (event, reportedGameId, name) => {
+      const gameId = normalizeGepGameId(reportedGameId);
+      const registered = this._registeredGameIds.includes(gameId);
+      this.log('GEP game-detected event received', {
+        reportedGameId,
+        canonicalGepGameId: gameId,
+        name,
+        registered,
+      });
+      if (!registered) {
+        this.log('Ignoring unregistered GEP game', { name, reportedGameId, canonicalGepGameId: gameId });
         return;
       }
-      this.log('Registered game detected', name, gameId);
-      if (gameId === kGepSupportedGameIds.TeamfightTactics) this.log('TFT CLIENT IDENTIFIED BY GEP', { name, gameId });
+
+      this.log('Registered GEP game detected', { name, reportedGameId, canonicalGepGameId: gameId });
       if (gameId === kGepSupportedGameIds.TeamfightTactics) {
-        void this._snapshotRecorder.recordLifecycle(gameId, 'game-detected', { name });
+        this.log('TFT CLIENT IDENTIFIED BY GEP', { name, reportedGameId, canonicalGepGameId: gameId });
+        // Create the session JSONL at detection time, before waiting for the
+        // first info update or baseline snapshot.
+        void this._snapshotRecorder.recordLifecycle(gameId, 'game-detected', {
+          name,
+          reportedGameId,
+          canonicalGepGameId: gameId,
+        });
       }
       void this._gepService.enableDetectedGame(event, gameId);
     });
 
     this._gepApi.on(
       'elevated-privileges-required',
-      (event, gameId, name, pid) => {
+      (event, reportedGameId, name, pid) => {
+        const gameId = normalizeGepGameId(reportedGameId);
         this.warn(
-          `Elevated privileges required for game ${name} (gameId: ${gameId}, pid: ${pid})`,
+          `Elevated privileges required for game ${name} (reportedGameId: ${reportedGameId}, canonicalGepGameId: ${gameId}, pid: ${pid})`,
         );
         if (gameId === kGepSupportedGameIds.TeamfightTactics) {
-          void this._snapshotRecorder.recordLifecycle(gameId, 'elevated-privileges-required', { name, pid });
+          void this._snapshotRecorder.recordLifecycle(gameId, 'elevated-privileges-required', {
+            name,
+            pid,
+            reportedGameId,
+            canonicalGepGameId: gameId,
+          });
         }
       },
     );
 
-    this._gepApi.on('new-info-update', (event, gameId, data) => {
+    this._gepApi.on('new-info-update', (event, reportedGameId, data) => {
+      const gameId = normalizeGepGameId(reportedGameId);
       if (gameId === kGepSupportedGameIds.TeamfightTactics) {
         void this._snapshotRecorder.recordGepInfo(gameId, data).catch(error => {
           this.error('Failed to persist raw TFT GEP info update', error);
@@ -150,7 +172,8 @@ export class GameEventsController extends PackageControllerBase {
       this.emit('gep-info', { gameId, data: gameId === kGepSupportedGameIds.TeamfightTactics ? sanitizeTftPayload(data) : data });
     });
 
-    this._gepApi.on('new-game-event', (event, gameId, data) => {
+    this._gepApi.on('new-game-event', (event, reportedGameId, data) => {
+      const gameId = normalizeGepGameId(reportedGameId);
       if (gameId === kGepSupportedGameIds.TeamfightTactics) {
         void this._snapshotRecorder.recordGepEvent(gameId, data).catch(error => {
           this.error('Failed to persist raw TFT GEP game event', error);
@@ -161,16 +184,18 @@ export class GameEventsController extends PackageControllerBase {
       this.emit('gep-event', { gameId, data: gameId === kGepSupportedGameIds.TeamfightTactics ? sanitizeTftPayload(data) : data });
     });
 
-    this._gepApi.on('error', (event, gameId, error, ...args) => {
-      this.error(`GEP error for game ${gameId}: ${error}`, ...args);
+    this._gepApi.on('error', (event, reportedGameId, error, ...args) => {
+      const gameId = normalizeGepGameId(reportedGameId);
+      this.error(`GEP error for game ${gameId} (reported ID: ${reportedGameId}): ${error}`, ...args);
       if (gameId === kGepSupportedGameIds.TeamfightTactics) {
         void this._snapshotRecorder.recordError(gameId, error, args).catch(() => undefined);
       }
       this.emit('gep-error', { gameId, error, args });
     });
 
-    this._gepApi.on('game-exit', (event, gameId, name, pid) => {
-      this.log(`Game exit: ${name} (gameId: ${gameId}, pid: ${pid})`);
+    this._gepApi.on('game-exit', (event, reportedGameId, name, pid) => {
+      const gameId = normalizeGepGameId(reportedGameId);
+      this.log(`Game exit: ${name} (reportedGameId: ${reportedGameId}, canonicalGepGameId: ${gameId}, pid: ${pid})`);
       if (gameId === kGepSupportedGameIds.TeamfightTactics) {
         void this._snapshotRecorder.recordLifecycle(gameId, 'game-exit', { name, pid });
         this._lastLoggedSnapshotRevision = -1;
