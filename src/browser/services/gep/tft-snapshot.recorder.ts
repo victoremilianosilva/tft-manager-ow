@@ -48,6 +48,7 @@ export class TftSnapshotRecorder {
   private readonly outputFile: string;
   private writeQueue: Promise<void> = Promise.resolve();
   private lastState: unknown = null;
+  private stateQueue: Promise<void> = Promise.resolve();
   private readonly sessionId: string;
 
   constructor() {
@@ -57,23 +58,28 @@ export class TftSnapshotRecorder {
   }
 
   public record(snapshot: TftGepSnapshot): Promise<void> {
-    const safe = sanitizeTftPayload(snapshot) as TftGepSnapshot;
-    const initial = this.lastState === null;
-    const changes = initial ? null : diffState(this.lastState, safe.info);
-    if (!initial && (!changes || Object.keys(changes).length === 0)) return Promise.resolve();
+    // Serialize state comparisons as well as writes so concurrent GEP updates
+    // cannot produce two baselines or advance the diff cursor after a failed write.
+    this.stateQueue = this.stateQueue.catch(() => undefined).then(async () => {
+      const safe = sanitizeTftPayload(snapshot) as TftGepSnapshot;
+      const initial = this.lastState === null;
+      const changes = initial ? null : diffState(this.lastState, safe.info);
+      if (!initial && (!changes || Object.keys(changes).length === 0)) return;
 
-    const entry = initial ? {
-      recordType: 'state_snapshot', capturedAt: safe.capturedAt,
-      sessionId: this.sessionId, gameId: safe.gameId,
-      revision: safe.revision, complete: safe.complete, state: safe.info,
-    } : {
-      recordType: 'state_delta', capturedAt: safe.capturedAt,
-      sessionId: this.sessionId, gameId: safe.gameId,
-      revision: safe.revision, parentRevision: safe.revision - 1,
-      changes,
-    };
-    this.lastState = JSON.parse(JSON.stringify(safe.info));
-    return this.append(entry);
+      const entry = initial ? {
+        recordType: 'state_snapshot', capturedAt: safe.capturedAt,
+        sessionId: this.sessionId, gameId: safe.gameId,
+        revision: safe.revision, complete: safe.complete, state: safe.info,
+      } : {
+        recordType: 'state_delta', capturedAt: safe.capturedAt,
+        sessionId: this.sessionId, gameId: safe.gameId,
+        revision: safe.revision, parentRevision: safe.revision - 1,
+        changes,
+      };
+      await this.append(entry);
+      this.lastState = JSON.parse(JSON.stringify(safe.info));
+    });
+    return this.stateQueue;
   }
 
   public recordLifecycle(gameId: number, event: string, payload?: unknown): Promise<void> {
