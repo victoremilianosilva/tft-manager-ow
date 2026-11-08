@@ -45,6 +45,9 @@ test('publishes schema v2 canonical state, not raw GEP info', () => {
  assert.strictEqual(local.localPlayer, true); assert.strictEqual(local.hp.value, 84);
  assert.strictEqual(local.gold.value, 35); assert.strictEqual(local.level.value, 4); assert.strictEqual(local.xp.value, 4);
  assert.strictEqual(local.board.slots.length, 28); assert.strictEqual(local.board.slots[0].unit.apiName, 'TFT_TestA');
+ assert.deepStrictEqual(local.board.slots[0].unit.star, { known: true, value: 2 });
+ assert.strictEqual(local.shop.slots[1].known, true);
+ assert.strictEqual(local.shop.slots[1].value, null);
  assert.strictEqual(local.board.slots[27].unit.apiName, 'TFT_TestB');
  assert.strictEqual(local.bench.slots.length, 9); assert.strictEqual(local.shop.slots[0].value, 'TFT_TestD');
  assert.deepStrictEqual(local.itemComponents.value, [{ apiName: 'DA_Component_BFSword', count: 2 }, { apiName: 'DA_Component_RecurveBow', count: 1 }]);

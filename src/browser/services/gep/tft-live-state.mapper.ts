@@ -1,7 +1,7 @@
 /** Canonical TFT state projection. GEP path knowledge lives only in this module. */
 type RecordValue = Record<string, any>;
 export interface KnownValue<T> { known: boolean; value: T | null; }
-export interface CanonicalUnit { apiName: string; star: number; items: string[]; }
+export interface CanonicalUnit { apiName: string; star: KnownValue<number>; items: string[]; }
 export interface CanonicalSlot { known: boolean; unit: CanonicalUnit | null; }
 export interface CanonicalPlayer {
   index: number; localPlayer: boolean;
@@ -39,7 +39,7 @@ function unitFrom(value: unknown): CanonicalUnit | null {
   if (!apiName) return null;
   const star = numberValue(value.level);
   const items = [value.item_1, value.item_2, value.item_3].map(textValue).filter((x): x is string => !!x);
-  return { apiName, star: star && star >= 1 && star <= 3 ? star : 1, items };
+  return { apiName, star: known(star !== null && star >= 1 && star <= 3 ? star : null), items };
 }
 function mapSlots(source: unknown, prefix: string, size: number): { known: boolean; slots: CanonicalSlot[] } {
   if (!isRecord(source)) return { known: false, slots: [] };
