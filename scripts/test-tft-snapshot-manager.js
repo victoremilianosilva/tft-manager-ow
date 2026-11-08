@@ -2,212 +2,77 @@ const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
 const ts = require('typescript');
-
-const sourcePath = path.join(
-  __dirname,
-  '..',
-  'src',
-  'browser',
-  'services',
-  'gep',
-  'tft-snapshot.manager.ts',
-);
-const source = fs.readFileSync(sourcePath, 'utf8');
-const compiled = ts.transpile(source, {
-  module: ts.ModuleKind.CommonJS,
-  target: ts.ScriptTarget.ES2019,
-});
-const loadedModule = { exports: {} };
-new Function('exports', 'require', 'module', compiled)(
-  loadedModule.exports,
-  require,
-  loadedModule,
-);
-const { TftSnapshotManager } = loadedModule.exports;
-
-function test(name, fn) {
-  try {
-    fn();
-    process.stdout.write('PASS ' + name + '\n');
-  } catch (error) {
-    process.stderr.write('FAIL ' + name + '\n');
-    throw error;
-  }
+function load(relative) {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'browser', 'services', 'gep', relative), 'utf8');
+  const compiled = ts.transpile(source, { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2019 });
+  const module = { exports: {} };
+  const localRequire = name => {
+    if (name === './tft-live-state.mapper') return mapperModule.exports;
+    return require(name);
+  };
+  new Function('exports', 'require', 'module', compiled)(module.exports, localRequire, module);
+  return module;
 }
-
-test('reconciliation applies getInfo baseline and marks snapshot complete', () => {
-  const manager = new TftSnapshotManager(21570);
-  manager.beginReconciliation();
-  const snapshot = manager.finishReconciliation({
-    info: {
-      me: { gold: '42', health: '80', xp: '{"level":6,"current_xp":12}' },
-      store: { shop_pieces: '{"slot_1":{"name":"TFT_Test"}}' },
-    },
-  });
-
-  assert.strictEqual(snapshot.complete, true);
-  assert.strictEqual(snapshot.info.me.gold, '42');
-  assert.deepStrictEqual(snapshot.info.me.xp, { level: 6, current_xp: 12 });
-  assert.deepStrictEqual(snapshot.info.store.shop_pieces, {
-    slot_1: { name: 'TFT_Test' },
-  });
-  assert.strictEqual(snapshot.revision, 1);
+const mapperSource = fs.readFileSync(path.join(__dirname, '..', 'src/browser/services/gep/tft-live-state.mapper.ts'), 'utf8');
+const mapperCompiled = ts.transpile(mapperSource, { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2019 });
+const mapperModule = { exports: {} };
+new Function('exports', 'require', 'module', mapperCompiled)(mapperModule.exports, require, mapperModule);
+const { TftSnapshotManager } = load('tft-snapshot.manager.ts').exports;
+function test(name, fn) { try { fn(); process.stdout.write('PASS ' + name + '\\n'); } catch (error) { process.stderr.write('FAIL ' + name + '\\n'); throw error; } }
+function fixture() {
+ return { info: {
+  me: { me: { health: '84', gold: '35', xp: { level: 4, current_xp: 4, xp_max: 10 } } },
+  roster: { roster: { player_status: {
+   Alpha: { index: 0, health: 81, xp: 5, localplayer: false },
+   Local: { index: 1, health: 84, xp: 4, localplayer: true },
+   Beta: { index: 2, health: 97, xp: 4, localplayer: false }
+  } } },
+  match_info: { match_info: { round_type: { stage: '2-6', type: 'PVP' } } },
+  board: { board: { board_pieces: { cell_1: { name: 'TFT_TestA', level: '2', item_1: 'DA_InfinityEdge', item_2: '', item_3: '' }, cell_28: { name: 'TFT_TestB', level: '1' } } } },
+  bench: { bench: { bench_pieces: { cell_1: { name: 'TFT_TestC', level: '1' } }, item_bench: [{ summoner: 'Local', bench_items: [{ name: 'DA_Component_BFSword', count: 2 }, { name: 'DA_Component_RecurveBow', count: 1 }] }] } },
+  store: { store: { shop_pieces: { slot_1: { name: 'TFT_TestD' }, slot_2: {}, slot_3: {}, slot_4: {}, slot_5: {} } } },
+  carousel: { carousel: { carousel_pieces: { slot_1: { item_1: 'DA_Component_GiantsBelt', item_2: '' } } } }
+ } };
+}
+test('publishes schema v2 canonical state, not raw GEP info', () => {
+ const manager = new TftSnapshotManager(21570); manager.beginReconciliation();
+ const snapshot = manager.finishReconciliation(fixture());
+ assert.strictEqual(snapshot.schemaVersion, 2); assert.strictEqual(snapshot.complete, true);
+ assert.ok(snapshot.state); assert.strictEqual(snapshot.info, undefined);
+ assert.strictEqual(snapshot.state.stage.value, 2); assert.strictEqual(snapshot.state.round.value, 6);
+ assert.strictEqual(snapshot.state.localPlayerIndex.value, 1);
+ const local = snapshot.state.players[1];
+ assert.strictEqual(local.localPlayer, true); assert.strictEqual(local.hp.value, 84);
+ assert.strictEqual(local.gold.value, 35); assert.strictEqual(local.level.value, 4); assert.strictEqual(local.xp.value, 4);
+ assert.strictEqual(local.board.slots.length, 28); assert.strictEqual(local.board.slots[0].unit.apiName, 'TFT_TestA');
+ assert.strictEqual(local.board.slots[27].unit.apiName, 'TFT_TestB');
+ assert.strictEqual(local.bench.slots.length, 9); assert.strictEqual(local.shop.slots[0].value, 'TFT_TestD');
+ assert.deepStrictEqual(local.itemComponents.value, [{ apiName: 'DA_Component_BFSword', count: 2 }, { apiName: 'DA_Component_RecurveBow', count: 1 }]);
+ assert.strictEqual(snapshot.state.players[0].board.known, false);
 });
-
-
-test('nested JSON strings inside objects and arrays are normalized recursively', () => {
-  const manager = new TftSnapshotManager(21570);
-  manager.beginReconciliation();
-  const snapshot = manager.finishReconciliation({
-    info: {
-      board: {
-        pieces: '[{"unit":{"name":"TFT_Test","items":"[]"}}]',
-      },
-      me: {
-        details: '{"rank":2,"stats":{"streak":3}}',
-      },
-    },
-  });
-
-  assert.deepStrictEqual(snapshot.info.board.pieces, [
-    { unit: { name: 'TFT_Test', items: [] } },
-  ]);
-  assert.deepStrictEqual(snapshot.info.me.details, {
-    rank: 2,
-    stats: { streak: 3 },
-  });
+test('buffers deltas during baseline and applies newest value', () => {
+ const manager = new TftSnapshotManager(21570); manager.beginReconciliation();
+ manager.applyInfoUpdate({ feature: 'me', category: 'me', key: 'gold', value: '35' });
+ const snapshot = manager.finishReconciliation(fixture());
+ assert.strictEqual(snapshot.state.players[1].gold.value, 35);
 });
-
-test('incremental updates preserve fields that did not change', () => {
-  const manager = new TftSnapshotManager(21570);
-  manager.beginReconciliation();
-  manager.finishReconciliation({
-    info: { me: { gold: '42', health: '80' } },
-  });
-
-  const snapshot = manager.applyInfoUpdate({
-    info: { me: { gold: '38' } },
-    feature: 'me',
-  });
-
-  assert.strictEqual(snapshot.info.me.gold, '38');
-  assert.strictEqual(snapshot.info.me.health, '80');
-  assert.strictEqual(snapshot.revision, 2);
+test('semantic duplicates do not increment revision', () => {
+ const manager = new TftSnapshotManager(21570); manager.beginReconciliation(); manager.finishReconciliation(fixture());
+ const revision = manager.getSnapshot().revision;
+ assert.strictEqual(manager.applyInfoUpdate({ info: { me: { me: { gold: '35' } } } }), null);
+ assert.strictEqual(manager.getSnapshot().revision, revision);
 });
-
-test('updates received during getInfo are replayed after the baseline', () => {
-  const manager = new TftSnapshotManager(21570);
-  manager.beginReconciliation();
-  manager.applyInfoUpdate({ info: { me: { gold: '35' } } });
-
-  const snapshot = manager.finishReconciliation({
-    info: { me: { gold: '40', health: '90' } },
-  });
-
-  assert.strictEqual(snapshot.info.me.gold, '35');
-  assert.strictEqual(snapshot.info.me.health, '90');
-  assert.strictEqual(snapshot.revision, 2);
-  assert.strictEqual(snapshot.complete, true);
+test('sensitive fields and combat telemetry never appear in canonical output', () => {
+ const manager = new TftSnapshotManager(21570); manager.beginReconciliation();
+ const input = fixture(); input.info.me.me.puuid = 'secret'; input.info.match_info.match_info.battle_stats = [{ damage: 123 }];
+ const snapshot = manager.finishReconciliation(input);
+ const json = JSON.stringify(snapshot);
+ assert.strictEqual(json.includes('secret'), false); assert.strictEqual(json.includes('battle_stats'), false);
 });
-
-test('flat GEP update shape is normalized by feature and category', () => {
-  const manager = new TftSnapshotManager(21570);
-  manager.beginReconciliation();
-  manager.finishReconciliation({ info: {} });
-
-  const snapshot = manager.applyInfoUpdate({
-    feature: 'board',
-    category: 'board',
-    key: 'board_pieces',
-    value: '{"cell_1":{"name":"TFT_Test"}}',
-  });
-
-  assert.deepStrictEqual(snapshot.info.board.board.board_pieces, {
-    cell_1: { name: 'TFT_Test' },
-  });
+test('unknown domains remain explicitly unknown, not fabricated', () => {
+ const manager = new TftSnapshotManager(21570); manager.beginReconciliation();
+ const snapshot = manager.finishReconciliation({ info: { me: { me: { gold: '10' } } } });
+ assert.strictEqual(snapshot.state.players[0], null);
+ assert.strictEqual(snapshot.state.players.every(p => p === null || p.board.known === false), true);
 });
-
-
-test('getInfo reconciliation removes fields absent from the new baseline', () => {
-  const manager = new TftSnapshotManager(21570);
-  manager.beginReconciliation();
-  manager.finishReconciliation({
-    info: { me: { gold: '42', health: '80' } },
-  });
-
-  manager.beginReconciliation();
-  const snapshot = manager.finishReconciliation({
-    info: { me: { health: '75' } },
-  });
-
-  assert.strictEqual(snapshot.info.me.gold, undefined);
-  assert.strictEqual(snapshot.info.me.health, '75');
-  assert.strictEqual(snapshot.complete, true);
-});
-
-test('reset clears previous match data and revision', () => {
-  const manager = new TftSnapshotManager(21570);
-  manager.beginReconciliation();
-  manager.finishReconciliation({ info: { me: { gold: '10' } } });
-
-  const snapshot = manager.reset(21570);
-  assert.strictEqual(snapshot.revision, 0);
-  assert.strictEqual(snapshot.complete, false);
-  assert.deepStrictEqual(snapshot.info, {});
-});
-
-
-test('semantic duplicate updates do not create a new revision', () => {
-  const manager = new TftSnapshotManager(21570);
-  manager.beginReconciliation();
-  manager.finishReconciliation({ info: { me: { gold: '42' } } });
-  assert.strictEqual(manager.applyInfoUpdate({ info: { me: { gold: '42' } } }), null);
-  assert.strictEqual(manager.getSnapshot().revision, 1);
-});
-
-test('combat telemetry is ignored and does not create revisions', () => {
-  const manager = new TftSnapshotManager(21570);
-  manager.beginReconciliation();
-  const initial = manager.finishReconciliation({ info: {
-    me: { gold: '30', health: '80' },
-    match_stats: { battle_stats: { damage: 123 }, player_status: { health: 80 } },
-    local_player_damage: { amount: 9 },
-  } });
-  assert.strictEqual(initial.info.local_player_damage, undefined);
-  assert.strictEqual(initial.info.match_stats.battle_stats, undefined);
-  const revision = initial.revision;
-  assert.strictEqual(manager.applyInfoUpdate({ info: {
-    match_stats: { battle_stats: { damage: 456 } },
-    local_player_damage: { amount: 20 },
-  } }), null);
-  assert.strictEqual(manager.getSnapshot().revision, revision);
-  assert.strictEqual(manager.getSnapshot().info.me.gold, '30');
-});
-
-test('credentials and account identifiers are removed from strategic state', () => {
-  const manager = new TftSnapshotManager(21570);
-  manager.beginReconciliation();
-  const snapshot = manager.finishReconciliation({ info: {
-    me: { gold: '20', puuid: 'private-id', account_id: 'private-account' },
-    lcu_info: { credentials: { token: 'private-token' } },
-  } });
-  const serialized = JSON.stringify(snapshot);
-  assert.strictEqual(serialized.includes('private-id'), false);
-  assert.strictEqual(serialized.includes('private-account'), false);
-  assert.strictEqual(serialized.includes('private-token'), false);
-  assert.strictEqual(snapshot.info.me.gold, '20');
-});
-
-
-test('derived round boundary state creates a compact strategic revision', () => {
-  const manager = new TftSnapshotManager(21570);
-  manager.beginReconciliation();
-  manager.finishReconciliation({ info: { me: { gold: '30' } } });
-  const snapshot = manager.applyInfoUpdate({
-    info: { round_flow: { boundaryIndex: 1, phase: 'ROUND_START_PVP' } },
-  });
-  assert.strictEqual(snapshot.info.round_flow.phase, 'ROUND_START_PVP');
-  assert.strictEqual(snapshot.revision, 2);
-});
-
-process.stdout.write('All TFT snapshot manager tests passed.\n');
+process.stdout.write('All canonical TFT state mapper tests passed.\\n');
