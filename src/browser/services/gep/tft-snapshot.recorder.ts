@@ -11,7 +11,7 @@ export function sanitizeTftPayload(value: unknown): unknown {
   const result: Record<string, unknown> = {};
   for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
     const normalized = key.toLowerCase().replace(/[^a-z0-9]/g, '');
-    if (normalized === 'token' || normalized === 'credentials' || normalized === 'lcuinfo' ||
+    if (normalized === 'token' || normalized === 'credentials' || normalized === 'password' || normalized === 'secret' || normalized === 'authorization' || normalized === 'apikey' || normalized === 'lcuinfo' ||
         normalized.includes('puuid') || normalized === 'accountid' || normalized === 'summonerid' ||
         normalized === 'platformid' || normalized === 'riotid') continue;
     if (normalized === 'augments' || normalized === 'augmentchoices') {
@@ -110,4 +110,56 @@ export class TftSnapshotRecorder {
     return this.writeQueue;
   }
   public getFilePath(): string { return this.outputFile; }
+}
+
+
+/**
+ * Appends full, sanitized records to two independent audit streams:
+ * raw GEP events and the exact canonical envelopes intended for IA.
+ * Neither stream contains authentication material or account identifiers.
+ */
+export class TftDualAuditRecorder {
+  private readonly outputDirectory = path.join(app.getPath('userData'), 'tft-snapshots');
+  private readonly rawFile: string;
+  private readonly inferenceFile: string;
+  private rawQueue: Promise<void> = Promise.resolve();
+  private inferenceQueue: Promise<void> = Promise.resolve();
+  private readonly sessionId = new Date().toISOString().replace(/[:.]/g, '-');
+
+  constructor() {
+    this.rawFile = path.join(this.outputDirectory, `tft-gep-raw-${this.sessionId}.jsonl`);
+    this.inferenceFile = path.join(this.outputDirectory, `tft-ia-payloads-${this.sessionId}.jsonl`);
+  }
+
+  public recordRawGepEvent(event: string, gameId: number, payload: unknown): Promise<void> {
+    const entry = {
+      recordType: 'raw_gep_event',
+      capturedAt: new Date().toISOString(),
+      auditSessionId: this.sessionId,
+      gameId,
+      event,
+      payload: sanitizeTftPayload(payload),
+    };
+    this.rawQueue = this.rawQueue.catch(() => undefined).then(() => this.append(this.rawFile, entry));
+    return this.rawQueue;
+  }
+
+  public recordInferencePayload(snapshot: TftGepSnapshot): Promise<void> {
+    const entry = {
+      recordType: 'canonical_ia_payload',
+      capturedAt: new Date().toISOString(),
+      auditSessionId: this.sessionId,
+      payload: sanitizeTftPayload(snapshot),
+    };
+    this.inferenceQueue = this.inferenceQueue.catch(() => undefined).then(() => this.append(this.inferenceFile, entry));
+    return this.inferenceQueue;
+  }
+
+  private async append(file: string, entry: unknown): Promise<void> {
+    await fs.promises.mkdir(this.outputDirectory, { recursive: true });
+    await fs.promises.appendFile(file, JSON.stringify(entry) + '\\n', { encoding: 'utf8' });
+  }
+
+  public getRawFilePath(): string { return this.rawFile; }
+  public getInferenceFilePath(): string { return this.inferenceFile; }
 }
