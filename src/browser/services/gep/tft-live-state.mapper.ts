@@ -13,7 +13,7 @@ export interface CanonicalPlayer {
   itemComponents: KnownValue<Array<{ apiName: string; count: number }>>;
 }
 export interface CanonicalTftState {
-  contract: "tft.live-state"; contractVersion: 1;
+  contract: "tft.live-state"; contractVersion: 1; matchId: KnownValue<string>;
   stage: KnownValue<number>; round: KnownValue<number>; phase: KnownValue<string>;
   localPlayerIndex: KnownValue<number>; players: Array<CanonicalPlayer | null>;
   carousel: KnownValue<Array<{ items: string[] }>>;
@@ -95,6 +95,8 @@ export function mapGepInfoToCanonicalState(info: unknown): CanonicalTftState {
   const localRoster = rosterEntries.find(([, value]) => isRecord(value) && value.localplayer === true);
   const localRosterName = localRoster?.[0] ?? null;
   const localIndex = localRoster ? numberValue(get(localRoster[1], "index")) : null;
+  const rawMatchId = get(info, "match_info", "match_info", "match_id");
+  const matchId = textValue(rawMatchId) ?? (numberValue(rawMatchId) === null ? null : String(numberValue(rawMatchId)));
   const roundText = textValue(get(info, "match_info", "match_info", "round_type", "stage"));
   const roundMatch = roundText ? /^(\\d+)-(\\d+)$/.exec(roundText) : null;
   const players: Array<CanonicalPlayer | null> = Array.from({ length: 8 }, (_, index) => {
@@ -116,7 +118,7 @@ export function mapGepInfoToCanonicalState(info: unknown): CanonicalTftState {
     };
   });
   return {
-    contract: "tft.live-state", contractVersion: 1,
+    contract: "tft.live-state", contractVersion: 1, matchId: known(matchId),
     stage: known(roundMatch ? Number(roundMatch[1]) : null),
     round: known(roundMatch ? Number(roundMatch[2]) : null),
     phase: known(textValue(get(info, "round_flow", "phase"))),

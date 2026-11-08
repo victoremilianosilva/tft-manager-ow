@@ -29,7 +29,7 @@ function fixture() {
    Local: { index: 1, health: 84, xp: 4, localplayer: true },
    Beta: { index: 2, health: 97, xp: 4, localplayer: false }
   } } },
-  match_info: { match_info: { round_type: { stage: '2-6', type: 'PVP' } } },
+  match_info: { match_info: { match_id: 778899, round_type: { stage: '2-6', type: 'PVP' } } },
   board: { board: { board_pieces: { cell_1: { name: 'TFT_TestA', level: '2', item_1: 'DA_InfinityEdge', item_2: '', item_3: '' }, cell_28: { name: 'TFT_TestB', level: '1' } } } },
   bench: { bench: { bench_pieces: { cell_1: { name: 'TFT_TestC', level: '1' } }, item_bench: [{ summoner: 'Local', bench_items: [{ name: 'DA_Component_BFSword', count: 2 }, { name: 'DA_Component_RecurveBow', count: 1 }] }] } },
   store: { store: { shop_pieces: { slot_1: { name: 'TFT_TestD' }, slot_2: {}, slot_3: {}, slot_4: {}, slot_5: {} } } },
@@ -42,6 +42,7 @@ test('publishes schema v2 canonical state, not raw GEP info', () => {
  assert.strictEqual(snapshot.schemaVersion, 2); assert.strictEqual(snapshot.complete, true);
  assert.ok(snapshot.sessionId);
  assert.ok(snapshot.state); assert.strictEqual(snapshot.info, undefined);
+ assert.strictEqual(snapshot.state.matchId.value, '778899');
  assert.strictEqual(snapshot.state.stage.value, 2); assert.strictEqual(snapshot.state.round.value, 6);
  assert.strictEqual(snapshot.state.localPlayerIndex.value, 1);
  const local = snapshot.state.players[1];

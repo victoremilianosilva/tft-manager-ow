@@ -50,6 +50,7 @@ export class TftSnapshotRecorder {
   private lastState: unknown = null;
   private lastRevision: number | null = null;
   private lastGameSessionId: string | null = null;
+  private lastMatchId: string | null = null;
   private stateQueue: Promise<void> = Promise.resolve();
   private readonly sessionId: string;
 
@@ -64,7 +65,9 @@ export class TftSnapshotRecorder {
     // cannot produce two baselines or advance the diff cursor after a failed write.
     this.stateQueue = this.stateQueue.catch(() => undefined).then(async () => {
       const safe = sanitizeTftPayload(snapshot) as TftGepSnapshot;
-      const initial = this.lastState === null || this.lastGameSessionId !== safe.sessionId;
+      const matchId = safe.state.matchId?.known ? safe.state.matchId.value : null;
+      const initial = this.lastState === null || this.lastGameSessionId !== safe.sessionId ||
+        (matchId !== null && this.lastMatchId !== matchId);
       const changes = initial ? null : diffState(this.lastState, safe.state);
       if (!initial && (!changes || Object.keys(changes).length === 0)) return;
 
@@ -82,6 +85,7 @@ export class TftSnapshotRecorder {
       this.lastState = JSON.parse(JSON.stringify(safe.state));
       this.lastRevision = safe.revision;
       this.lastGameSessionId = safe.sessionId;
+      this.lastMatchId = matchId;
     });
     return this.stateQueue;
   }

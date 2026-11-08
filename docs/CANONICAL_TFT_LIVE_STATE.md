@@ -21,6 +21,7 @@ source features remain unknown and are never synthesized.
 
 ## Canonical state
 
+- Match ID is normalized to a string when GEP reports it; it scopes revisions across consecutive matches in one client process.
 - Stage and round are numeric.
 - Players are indexed by GEP roster index; names and account identifiers are not
   exported. `localPlayerIndex` is derived from `localplayer`.
