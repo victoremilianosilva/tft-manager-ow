@@ -102,7 +102,7 @@ export class TftSnapshotRecorder {
     });
   }
   private append(entry: unknown): Promise<void> {
-    const line = JSON.stringify(entry) + '\n';
+    const line = JSON.stringify(entry) + '\\n';
     this.writeQueue = this.writeQueue.catch(() => undefined).then(async () => {
       await fs.promises.mkdir(this.outputDirectory, { recursive: true });
       await fs.promises.appendFile(this.outputFile, line, { encoding: 'utf8' });
