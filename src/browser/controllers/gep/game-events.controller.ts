@@ -162,26 +162,21 @@ export class GameEventsController extends PackageControllerBase {
     this._gepApi.on('new-info-update', (event, reportedGameId, data) => {
       const gameId = normalizeGepGameId(reportedGameId);
       if (gameId === kGepSupportedGameIds.TeamfightTactics) {
-        void this._snapshotRecorder.recordGepInfo(gameId, data).catch(error => {
-          this.error('Failed to persist raw TFT GEP info update', error);
-          void this._snapshotRecorder.recordError(gameId, error).catch(() => undefined);
-        });
-        this.log('TFT GEP info update', sanitizeTftPayload(data));
+        // Partial updates are merged; only strategic semantic changes are recorded.
+        this._gepService.handleTftInfoUpdate(gameId, data);
       }
-      this._gepService.handleTftInfoUpdate(gameId, data);
       this.emit('gep-info', { gameId, data: gameId === kGepSupportedGameIds.TeamfightTactics ? sanitizeTftPayload(data) : data });
     });
 
     this._gepApi.on('new-game-event', (event, reportedGameId, data) => {
       const gameId = normalizeGepGameId(reportedGameId);
+      // Only meaningful round boundaries are projected into strategic state.
+      // Combat start/end and raw GEP event payloads are not persisted.
       if (gameId === kGepSupportedGameIds.TeamfightTactics) {
-        void this._snapshotRecorder.recordGepEvent(gameId, data).catch(error => {
-          this.error('Failed to persist raw TFT GEP game event', error);
-          void this._snapshotRecorder.recordError(gameId, error).catch(() => undefined);
-        });
-        this.log('TFT GEP game event', sanitizeTftPayload(data));
+        this._gepService.handleTftGameEvent(gameId, data);
+      } else {
+        this.emit('gep-event', { gameId, data });
       }
-      this.emit('gep-event', { gameId, data: gameId === kGepSupportedGameIds.TeamfightTactics ? sanitizeTftPayload(data) : data });
     });
 
     this._gepApi.on('error', (event, reportedGameId, error, ...args) => {

@@ -156,4 +156,58 @@ test('reset clears previous match data and revision', () => {
   assert.deepStrictEqual(snapshot.info, {});
 });
 
+
+test('semantic duplicate updates do not create a new revision', () => {
+  const manager = new TftSnapshotManager(21570);
+  manager.beginReconciliation();
+  manager.finishReconciliation({ info: { me: { gold: '42' } } });
+  assert.strictEqual(manager.applyInfoUpdate({ info: { me: { gold: '42' } } }), null);
+  assert.strictEqual(manager.getSnapshot().revision, 1);
+});
+
+test('combat telemetry is ignored and does not create revisions', () => {
+  const manager = new TftSnapshotManager(21570);
+  manager.beginReconciliation();
+  const initial = manager.finishReconciliation({ info: {
+    me: { gold: '30', health: '80' },
+    match_stats: { battle_stats: { damage: 123 }, player_status: { health: 80 } },
+    local_player_damage: { amount: 9 },
+  } });
+  assert.strictEqual(initial.info.local_player_damage, undefined);
+  assert.strictEqual(initial.info.match_stats.battle_stats, undefined);
+  const revision = initial.revision;
+  assert.strictEqual(manager.applyInfoUpdate({ info: {
+    match_stats: { battle_stats: { damage: 456 } },
+    local_player_damage: { amount: 20 },
+  } }), null);
+  assert.strictEqual(manager.getSnapshot().revision, revision);
+  assert.strictEqual(manager.getSnapshot().info.me.gold, '30');
+});
+
+test('credentials and account identifiers are removed from strategic state', () => {
+  const manager = new TftSnapshotManager(21570);
+  manager.beginReconciliation();
+  const snapshot = manager.finishReconciliation({ info: {
+    me: { gold: '20', puuid: 'private-id', account_id: 'private-account' },
+    lcu_info: { credentials: { token: 'private-token' } },
+  } });
+  const serialized = JSON.stringify(snapshot);
+  assert.strictEqual(serialized.includes('private-id'), false);
+  assert.strictEqual(serialized.includes('private-account'), false);
+  assert.strictEqual(serialized.includes('private-token'), false);
+  assert.strictEqual(snapshot.info.me.gold, '20');
+});
+
+
+test('derived round boundary state creates a compact strategic revision', () => {
+  const manager = new TftSnapshotManager(21570);
+  manager.beginReconciliation();
+  manager.finishReconciliation({ info: { me: { gold: '30' } } });
+  const snapshot = manager.applyInfoUpdate({
+    info: { round_flow: { boundaryIndex: 1, phase: 'ROUND_START_PVP' } },
+  });
+  assert.strictEqual(snapshot.info.round_flow.phase, 'ROUND_START_PVP');
+  assert.strictEqual(snapshot.revision, 2);
+});
+
 process.stdout.write('All TFT snapshot manager tests passed.\n');

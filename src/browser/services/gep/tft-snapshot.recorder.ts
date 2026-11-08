@@ -3,141 +3,111 @@ import path from 'path';
 import { app } from 'electron';
 import { TftGepSnapshot } from './tft-snapshot.manager';
 
-export type TftCaptureRecordKind =
-  | 'snapshot'
-  | 'info_update'
-  | 'game_event'
-  | 'lifecycle'
-  | 'capture_error';
+export type TftCaptureRecordKind = 'state_snapshot' | 'state_delta' | 'lifecycle' | 'capture_error';
 
-export interface TftCaptureRecord {
-  kind: TftCaptureRecordKind;
-  gameId: number;
-  payload: unknown;
-  capturedAt?: string;
-  matchId?: string | null;
-}
-
+/** Remove credentials and account identifiers before any serialization. */
 export function sanitizeTftPayload(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(sanitizeTftPayload);
   if (!value || typeof value !== 'object') return value;
-
-  const sanitized: Record<string, unknown> = {};
+  const result: Record<string, unknown> = {};
   for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
-    if (key.toLowerCase() === 'augments' || key.toLowerCase() === 'augment_choices') {
-      sanitized[key] = '[redacted: Overwolf TFT GEP display restriction]';
-    } else {
-      sanitized[key] = sanitizeTftPayload(nested);
-    }
+    const normalized = key.toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (normalized === 'token' || normalized === 'credentials' ||
+        normalized === 'lcuinfo' || normalized.includes('puuid') ||
+        normalized === 'accountid' || normalized === 'summonerid' ||
+        normalized === 'platformid' || normalized === 'riotid') continue;
+    if (normalized === 'augments' || normalized === 'augmentchoices') {
+      result[key] = '[redacted: Overwolf TFT GEP display restriction]';
+    } else result[key] = sanitizeTftPayload(nested);
   }
-  return sanitized;
+  return result;
 }
 
-function findMatchId(value: unknown, depth = 0): string | null {
-  if (!value || typeof value !== 'object' || depth > 5) return null;
-  if (Array.isArray(value)) {
-    for (const item of value) {
-      const found = findMatchId(item, depth + 1);
-      if (found) return found;
+function flatten(value: unknown, prefix = '', output: Record<string, unknown> = {}): Record<string, unknown> {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
+      flatten(nested, prefix ? prefix + '.' + key : key, output);
     }
-    return null;
+  } else output[prefix] = value;
+  return output;
+}
+function diffState(previous: unknown, next: unknown): Record<string, unknown> {
+  const before = flatten(previous);
+  const after = flatten(next);
+  const changes: Record<string, unknown> = {};
+  for (const key of Object.keys(after)) {
+    if (JSON.stringify(before[key]) !== JSON.stringify(after[key])) changes[key] = after[key];
   }
-
-  const record = value as Record<string, unknown>;
-  for (const key of ['match_id', 'matchId']) {
-    const candidate = record[key];
-    if (typeof candidate === 'string' && candidate.trim()) return candidate.trim();
-    if (typeof candidate === 'number' && Number.isFinite(candidate)) return String(candidate);
-  }
-  for (const nested of Object.values(record)) {
-    const found = findMatchId(nested, depth + 1);
-    if (found) return found;
-  }
-  return null;
+  for (const key of Object.keys(before)) if (!(key in after)) changes[key] = null;
+  return changes;
 }
 
-/**
- * Append-only JSONL recorder. Every GEP info delta and game event is stored
- * independently, alongside reconciled snapshots. A rejected write never
- * poisons the queue: later records still get an attempt.
- */
+/** Writes a full baseline followed only by compact semantic state deltas. */
 export class TftSnapshotRecorder {
   private readonly outputDirectory: string;
   private readonly outputFile: string;
   private writeQueue: Promise<void> = Promise.resolve();
-  private lastMatchId: string | null = null;
+  private lastState: unknown = null;
+  private stateQueue: Promise<void> = Promise.resolve();
+  private readonly sessionId: string;
 
   constructor() {
     this.outputDirectory = path.join(app.getPath('userData'), 'tft-snapshots');
-    const sessionId = new Date().toISOString().replace(/[:.]/g, '-');
-    this.outputFile = path.join(
-      this.outputDirectory,
-      `tft-session-${sessionId}.jsonl`,
-    );
+    this.sessionId = new Date().toISOString().replace(/[:.]/g, '-');
+    this.outputFile = path.join(this.outputDirectory, `tft-session-${this.sessionId}.jsonl`);
   }
 
   public record(snapshot: TftGepSnapshot): Promise<void> {
-    return this.recordEntry({
-      kind: 'snapshot',
-      gameId: snapshot.gameId,
-      payload: snapshot,
-      capturedAt: snapshot.capturedAt,
+    // Serialize state comparisons as well as writes so concurrent GEP updates
+    // cannot produce two baselines or advance the diff cursor after a failed write.
+    this.stateQueue = this.stateQueue.catch(() => undefined).then(async () => {
+      const safe = sanitizeTftPayload(snapshot) as TftGepSnapshot;
+      const initial = this.lastState === null;
+      const changes = initial ? null : diffState(this.lastState, safe.info);
+      if (!initial && (!changes || Object.keys(changes).length === 0)) return;
+
+      const entry = initial ? {
+        recordType: 'state_snapshot', capturedAt: safe.capturedAt,
+        sessionId: this.sessionId, gameId: safe.gameId,
+        revision: safe.revision, complete: safe.complete, state: safe.info,
+      } : {
+        recordType: 'state_delta', capturedAt: safe.capturedAt,
+        sessionId: this.sessionId, gameId: safe.gameId,
+        revision: safe.revision, parentRevision: safe.revision - 1,
+        changes,
+      };
+      await this.append(entry);
+      this.lastState = JSON.parse(JSON.stringify(safe.info));
     });
-  }
-
-  public recordGepInfo(gameId: number, payload: unknown): Promise<void> {
-    return this.recordEntry({ kind: 'info_update', gameId, payload });
-  }
-
-  public recordGepEvent(gameId: number, payload: unknown): Promise<void> {
-    return this.recordEntry({ kind: 'game_event', gameId, payload });
+    return this.stateQueue;
   }
 
   public recordLifecycle(gameId: number, event: string, payload?: unknown): Promise<void> {
-    if (event === 'game-detected') this.lastMatchId = null;
-    const pending = this.recordEntry({
-      kind: 'lifecycle',
-      gameId,
-      payload: { event, data: payload ?? null },
+    return this.append({
+      recordType: 'lifecycle', capturedAt: new Date().toISOString(),
+      sessionId: this.sessionId, gameId,
+      payload: sanitizeTftPayload({ event, data: payload ?? null }),
     });
-    if (event === 'game-exit') this.lastMatchId = null;
-    return pending;
   }
 
   public recordError(gameId: number, error: unknown, details?: unknown): Promise<void> {
-    return this.recordEntry({
-      kind: 'capture_error',
-      gameId,
-      payload: {
+    return this.append({
+      recordType: 'capture_error', capturedAt: new Date().toISOString(),
+      sessionId: this.sessionId, gameId,
+      payload: sanitizeTftPayload({
         message: error instanceof Error ? error.message : String(error),
         details: details ?? null,
-      },
+      }),
     });
   }
 
-  public recordEntry(record: TftCaptureRecord): Promise<void> {
-    const safePayload = sanitizeTftPayload(record.payload);
-    const matchId = record.matchId ?? findMatchId(safePayload) ?? this.lastMatchId;
-    if (matchId) this.lastMatchId = matchId;
-    const line = `${JSON.stringify({
-      schemaVersion: 2,
-      recordType: record.kind,
-      capturedAt: record.capturedAt ?? new Date().toISOString(),
-      gameId: record.gameId,
-      matchId,
-      payload: safePayload,
-    })}\n`;
-
-    // Recover the chain after a failed append so a transient filesystem error
-    // does not prevent all subsequent events from being persisted.
+  private append(entry: unknown): Promise<void> {
+    const line = JSON.stringify(entry) + '\n';
     this.writeQueue = this.writeQueue.catch(() => undefined).then(async () => {
       await fs.promises.mkdir(this.outputDirectory, { recursive: true });
       await fs.promises.appendFile(this.outputFile, line, { encoding: 'utf8' });
     });
     return this.writeQueue;
   }
-
-  public getFilePath(): string {
-    return this.outputFile;
-  }
+  public getFilePath(): string { return this.outputFile; }
 }
