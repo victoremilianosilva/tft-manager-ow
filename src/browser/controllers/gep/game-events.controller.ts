@@ -2,6 +2,7 @@ import { app, ipcMain } from 'electron';
 import { PackageControllerBase } from '../base.controller';
 import { GameEventsService } from '../../services/gep/game-events.service';
 import { TftSnapshotRecorder } from '../../services/gep/tft-snapshot.recorder';
+import { TftLiveInferenceBridge } from '../../services/gep/tft-live-inference.bridge';
 import { OverwolfGameEventPackage } from '@overwolf/ow-electron-packages-types';
 import { kGepSupportedGameIds } from '@overwolf/ow-electron-packages-types/gep-supported-games';
 import { normalizeGepGameId } from '../../services/gep/tft-game-id';
@@ -11,6 +12,7 @@ export class GameEventsController extends PackageControllerBase {
   private _gepService: GameEventsService;
   private _gepApi: OverwolfGameEventPackage;
   private _snapshotRecorder: TftSnapshotRecorder;
+  private _liveInferenceBridge: TftLiveInferenceBridge;
   private _registeredGameIds: number[] = [];
   private _lastLoggedSnapshotRevision = -1;
   private _recorderPathLogged = false;
@@ -28,6 +30,15 @@ export class GameEventsController extends PackageControllerBase {
     if (!this._gepService) {
       this._gepService = new GameEventsService(this._gepApi);
       this._snapshotRecorder = new TftSnapshotRecorder();
+      this._liveInferenceBridge = new TftLiveInferenceBridge((status, details) => {
+        if (status === 'connected') {
+          this.log('Canonical TFT snapshot delivered to local inference receiver', details);
+        } else if (status === 'unavailable') {
+          this.warn('Local TFT inference receiver is unavailable; snapshot remains in JSONL capture', details);
+        } else {
+          this.error('Local TFT inference receiver rejected a canonical snapshot', details);
+        }
+      });
       this._gepService.on('tft-features-ready', details => {
         this.log('TFT GEP features configured', details);
         void this._snapshotRecorder.recordLifecycle(kGepSupportedGameIds.TeamfightTactics, 'features-ready', details);
@@ -48,6 +59,9 @@ export class GameEventsController extends PackageControllerBase {
           this._lastLoggedSnapshotRevision = snapshot.revision;
         }
 
+        // Electron's main process forwards the already-converted canonical DTO.
+        // No raw GEP tree or account identifiers cross this local bridge.
+        void this._liveInferenceBridge.publish(snapshot);
         void this._snapshotRecorder.record(snapshot).then(() => {
           if (!this._recorderPathLogged) {
             this.log('TFT JSONL capture file', this._snapshotRecorder.getFilePath());
