@@ -1,7 +1,7 @@
 import { app, ipcMain } from 'electron';
 import { PackageControllerBase } from '../base.controller';
 import { GameEventsService } from '../../services/gep/game-events.service';
-import { TftSnapshotRecorder } from '../../services/gep/tft-snapshot.recorder';
+import { TftSnapshotRecorder, TftDualAuditRecorder } from '../../services/gep/tft-snapshot.recorder';
 import { OverwolfGameEventPackage } from '@overwolf/ow-electron-packages-types';
 import { kGepSupportedGameIds } from '@overwolf/ow-electron-packages-types/gep-supported-games';
 import { normalizeGepGameId } from '../../services/gep/tft-game-id';
@@ -11,6 +11,7 @@ export class GameEventsController extends PackageControllerBase {
   private _gepService: GameEventsService;
   private _gepApi: OverwolfGameEventPackage;
   private _snapshotRecorder: TftSnapshotRecorder;
+  private _auditRecorder: TftDualAuditRecorder;
   private _registeredGameIds: number[] = [];
   private _lastLoggedSnapshotRevision = -1;
   private _recorderPathLogged = false;
@@ -28,6 +29,7 @@ export class GameEventsController extends PackageControllerBase {
     if (!this._gepService) {
       this._gepService = new GameEventsService(this._gepApi);
       this._snapshotRecorder = new TftSnapshotRecorder();
+      this._auditRecorder = new TftDualAuditRecorder();
       this._gepService.on('tft-features-ready', details => {
         this.log('TFT GEP features configured', details);
         void this._snapshotRecorder.recordLifecycle(kGepSupportedGameIds.TeamfightTactics, 'features-ready', details);
@@ -49,7 +51,7 @@ export class GameEventsController extends PackageControllerBase {
         }
 
         // Persist every complete canonical payload that would be supplied to IA.
-        void this._snapshotRecorder.recordInferencePayload(snapshot).catch(error => {
+        void this._auditRecorder.recordInferencePayload(snapshot).catch(error => {
           this.error('Failed to persist canonical IA payload', error);
         });
         void this._snapshotRecorder.record(snapshot).then(() => {
@@ -169,7 +171,7 @@ export class GameEventsController extends PackageControllerBase {
       const gameId = normalizeGepGameId(reportedGameId);
       if (gameId === kGepSupportedGameIds.TeamfightTactics) {
         // Partial updates are merged; only strategic semantic changes are recorded.
-        void this._snapshotRecorder.recordRawGepEvent('new-info-update', gameId, data).catch(error => {
+        void this._auditRecorder.recordRawGepEvent('new-info-update', gameId, data).catch(error => {
           this.error('Failed to persist raw GEP info update', error);
         });
         this._gepService.handleTftInfoUpdate(gameId, data);
