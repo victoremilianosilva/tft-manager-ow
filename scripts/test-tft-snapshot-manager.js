@@ -198,4 +198,16 @@ test('credentials and account identifiers are removed from strategic state', () 
   assert.strictEqual(snapshot.info.me.gold, '20');
 });
 
+
+test('derived round boundary state creates a compact strategic revision', () => {
+  const manager = new TftSnapshotManager(21570);
+  manager.beginReconciliation();
+  manager.finishReconciliation({ info: { me: { gold: '30' } } });
+  const snapshot = manager.applyInfoUpdate({
+    info: { round_flow: { boundaryIndex: 1, phase: 'ROUND_START_PVP' } },
+  });
+  assert.strictEqual(snapshot.info.round_flow.phase, 'ROUND_START_PVP');
+  assert.strictEqual(snapshot.revision, 2);
+});
+
 process.stdout.write('All TFT snapshot manager tests passed.\n');
