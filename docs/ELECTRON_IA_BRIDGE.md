@@ -11,7 +11,7 @@ The Python receiver is intentionally a separate follow-up and is not included he
 - Body: the complete canonical `tft.live-state` snapshot envelope (JSON).
 - No authentication headers, credentials, or remote hosts are supported. The client rejects non-loopback URLs.
 
-Every canonical snapshot is still written to `tft-ia-payloads-*.jsonl` independently of delivery. Raw GEP capture is unchanged. If Python is not running, delivery fails non-fatally, the JSONL capture continues, and a throttled warning is written to the app log.
+Every canonical snapshot is still written to `tft-ia-payloads-*.jsonl` independently of delivery. Raw GEP capture is unchanged. If Python is not running, delivery fails non-fatally, the JSONL capture continues, and a throttled warning is written to the app log. To avoid an unbounded memory backlog, the transport allows one in-flight request and coalesces pending deliveries to the newest complete snapshot. The JSONL files remain the lossless audit source for every captured event/snapshot.
 
 ## In-app diagnostic
 
