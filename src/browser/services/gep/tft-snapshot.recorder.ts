@@ -167,7 +167,7 @@ export class TftDualAuditRecorder {
 
   private async append(file: string, entry: unknown): Promise<void> {
     await fs.promises.mkdir(this.outputDirectory, { recursive: true });
-    await fs.promises.appendFile(file, JSON.stringify(entry) + '\\n', { encoding: 'utf8' });
+    await fs.promises.appendFile(file, JSON.stringify(entry) + '\n', { encoding: 'utf8' });
   }
 
   public getRawFilePath(): string { return this.rawFile; }
