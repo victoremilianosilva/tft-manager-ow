@@ -11,9 +11,11 @@ export function sanitizeTftPayload(value: unknown): unknown {
   const result: Record<string, unknown> = {};
   for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
     const normalized = key.toLowerCase().replace(/[^a-z0-9]/g, '');
-    if (normalized === 'token' || normalized === 'credentials' || normalized === 'password' || normalized === 'secret' || normalized === 'authorization' || normalized === 'apikey' || normalized === 'lcuinfo' ||
-        normalized.includes('puuid') || normalized === 'accountid' || normalized === 'summonerid' ||
-        normalized === 'platformid' || normalized === 'riotid') continue;
+    if (normalized.includes('token') || normalized.includes('credential') || normalized.includes('password') ||
+        normalized.includes('secret') || normalized.includes('authorization') || normalized === 'auth' ||
+        normalized.includes('apikey') || normalized.includes('cookie') || normalized === 'lcuinfo' ||
+        normalized.includes('puuid') || normalized.includes('accountid') || normalized.includes('summonerid') ||
+        normalized.includes('platformid') || normalized === 'riotid') continue;
     if (normalized === 'augments' || normalized === 'augmentchoices') {
       result[key] = '[redacted: Overwolf TFT GEP display restriction]';
     } else result[key] = sanitizeTftPayload(nested);
