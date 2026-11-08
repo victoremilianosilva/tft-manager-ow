@@ -25,7 +25,7 @@ const { TftDualAuditRecorder } = moduleObject.exports;
 (async () => {
   const recorder = new TftDualAuditRecorder();
   await recorder.recordRawGepEvent('new-info-update', 21570, {
-    me: { gold: 42, credentials: { token: 'must-not-persist' }, puuid: 'private-id' },
+    me: { gold: 42, credentials: { token: 'must-not-persist' }, access_token: 'access-secret', api_key: 'key-secret', puuid: 'private-id' },
     board: { cell_1: { name: 'TFT_TestUnit' } },
   });
   const snapshot = {
@@ -41,6 +41,8 @@ const { TftDualAuditRecorder } = moduleObject.exports;
   assert.strictEqual(raw.payload.me.gold, 42);
   assert.strictEqual(JSON.stringify(raw).includes('must-not-persist'), false);
   assert.strictEqual(JSON.stringify(raw).includes('private-id'), false);
+  assert.strictEqual(JSON.stringify(raw).includes('access-secret'), false);
+  assert.strictEqual(JSON.stringify(raw).includes('key-secret'), false);
   assert.strictEqual(JSON.parse(appended[1].line).payload.revision, 1);
   assert.strictEqual(JSON.parse(appended[2].line).payload.revision, 2);
   assert.notStrictEqual(recorder.getRawFilePath(), recorder.getInferenceFilePath());
