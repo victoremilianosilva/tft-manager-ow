@@ -1,10 +1,11 @@
+import { randomUUID } from "crypto";
 /**
  * Maintains a revisioned GEP baseline internally and publishes only the
  * canonical, game-ready state contract. Raw GEP paths never leave this module.
  */
 import { CanonicalTftState, mapGepInfoToCanonicalState } from "./tft-live-state.mapper";
 export interface TftGepSnapshot {
-  schemaVersion: 2; gameId: number; revision: number;
+  schemaVersion: 2; gameId: number; sessionId: string; revision: number;
   capturedAt: string; complete: boolean; state: CanonicalTftState;
 }
 type UnknownRecord = Record<string, any>;
@@ -72,6 +73,7 @@ function strategicTree(payload: unknown): UnknownRecord {
 export class TftSnapshotManager {
   private info: UnknownRecord = {};
   private revision = 0;
+  private sessionId = randomUUID();
   private capturedAt = new Date().toISOString();
   private complete = false;
   private reconciling = false;
@@ -95,14 +97,14 @@ export class TftSnapshotManager {
   }
   public markIncomplete(): TftGepSnapshot { this.complete = false; return this.getSnapshot(); }
   public reset(gameId: number): TftGepSnapshot {
-    this.gameId = gameId; this.info = {}; this.revision = 0;
+    this.gameId = gameId; this.sessionId = randomUUID(); this.info = {}; this.revision = 0;
     this.capturedAt = new Date().toISOString(); this.complete = false;
     this.reconciling = false; this.bufferedUpdates = [];
     return this.getSnapshot();
   }
   public getSnapshot(): TftGepSnapshot {
     return {
-      schemaVersion: 2, gameId: this.gameId, revision: this.revision,
+      schemaVersion: 2, gameId: this.gameId, sessionId: this.sessionId, revision: this.revision,
       capturedAt: this.capturedAt, complete: this.complete,
       state: mapGepInfoToCanonicalState(this.info),
     };

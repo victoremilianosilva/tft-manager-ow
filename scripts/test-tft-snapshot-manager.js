@@ -18,7 +18,9 @@ const mapperCompiled = ts.transpile(mapperSource, { module: ts.ModuleKind.Common
 const mapperModule = { exports: {} };
 new Function('exports', 'require', 'module', mapperCompiled)(mapperModule.exports, require, mapperModule);
 const { TftSnapshotManager } = load('tft-snapshot.manager.ts').exports;
-function test(name, fn) { try { fn(); process.stdout.write('PASS ' + name + '\n'); } catch (error) { process.stderr.write('FAIL ' + name + '\n'); throw error; } }
+function test(name, fn) { try { fn(); process.stdout.write('PASS ' + name + '
+'); } catch (error) { process.stderr.write('FAIL ' + name + '
+'); throw error; } }
 function fixture() {
  return { info: {
   me: { me: { health: '84', gold: '35', xp: { level: 4, current_xp: 4, xp_max: 10 } } },
@@ -38,6 +40,7 @@ test('publishes schema v2 canonical state, not raw GEP info', () => {
  const manager = new TftSnapshotManager(21570); manager.beginReconciliation();
  const snapshot = manager.finishReconciliation(fixture());
  assert.strictEqual(snapshot.schemaVersion, 2); assert.strictEqual(snapshot.complete, true);
+ assert.ok(snapshot.sessionId);
  assert.ok(snapshot.state); assert.strictEqual(snapshot.info, undefined);
  assert.strictEqual(snapshot.state.stage.value, 2); assert.strictEqual(snapshot.state.round.value, 6);
  assert.strictEqual(snapshot.state.localPlayerIndex.value, 1);
@@ -78,4 +81,5 @@ test('unknown domains remain explicitly unknown, not fabricated', () => {
  assert.strictEqual(snapshot.state.players[0], null);
  assert.strictEqual(snapshot.state.players.every(p => p === null || p.board.known === false), true);
 });
-process.stdout.write('All canonical TFT state mapper tests passed.\n');
+process.stdout.write('All canonical TFT state mapper tests passed.
+');

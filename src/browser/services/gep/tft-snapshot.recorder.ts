@@ -49,6 +49,7 @@ export class TftSnapshotRecorder {
   private writeQueue: Promise<void> = Promise.resolve();
   private lastState: unknown = null;
   private lastRevision: number | null = null;
+  private lastGameSessionId: string | null = null;
   private stateQueue: Promise<void> = Promise.resolve();
   private readonly sessionId: string;
 
@@ -63,23 +64,24 @@ export class TftSnapshotRecorder {
     // cannot produce two baselines or advance the diff cursor after a failed write.
     this.stateQueue = this.stateQueue.catch(() => undefined).then(async () => {
       const safe = sanitizeTftPayload(snapshot) as TftGepSnapshot;
-      const initial = this.lastState === null;
+      const initial = this.lastState === null || this.lastGameSessionId !== safe.sessionId;
       const changes = initial ? null : diffState(this.lastState, safe.state);
       if (!initial && (!changes || Object.keys(changes).length === 0)) return;
 
       const entry = initial ? {
         recordType: 'state_snapshot', capturedAt: safe.capturedAt,
-        sessionId: this.sessionId, gameId: safe.gameId,
+        sessionId: this.sessionId, gameSessionId: safe.sessionId, gameId: safe.gameId,
         revision: safe.revision, complete: safe.complete, state: safe.state,
       } : {
         recordType: 'state_delta', capturedAt: safe.capturedAt,
-        sessionId: this.sessionId, gameId: safe.gameId,
+        sessionId: this.sessionId, gameSessionId: safe.sessionId, gameId: safe.gameId,
         revision: safe.revision, parentRevision: this.lastRevision,
         changes,
       };
       await this.append(entry);
       this.lastState = JSON.parse(JSON.stringify(safe.state));
       this.lastRevision = safe.revision;
+      this.lastGameSessionId = safe.sessionId;
     });
     return this.stateQueue;
   }
