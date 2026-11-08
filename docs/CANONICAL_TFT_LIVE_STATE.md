@@ -50,18 +50,21 @@ Those remain explicitly unknown. Historical `match_stats.board_players` must not
 be substituted for current opponent boards.
 
 
-## Local inference transport
+## Offline dual JSONL audit (no network transport)
 
-The Electron main process forwards each already-normalized snapshot to
-`http://127.0.0.1:8765/v1/snapshot`. The endpoint can be overridden with
-`TFT_LIVE_INFERENCE_URL`, but it must remain an HTTP loopback URL ending in
-`/v1/snapshot`. Raw GEP feature trees are never sent over this bridge.
+The Overwolf-to-Python HTTP bridge is disabled and removed. Overwolf does not
+connect to Python, localhost, or any external inference endpoint.
 
-The Python receiver must be started separately with
-`python -m live_inference.service --host 127.0.0.1 --port 8765`. If it is not
-running, Overwolf keeps recording canonical snapshots to JSONL and retries
-delivery after a short cooldown; the game capture path is not blocked.
+Two independent JSONL files are written under the app's `userData/tft-snapshots`
+directory:
 
-A successful HTTP delivery confirms only that the Python receiver validated
-and sequenced the canonical snapshot. It does not mean the native Engine has
-imported the state or that policy inference is available.
+- `tft-gep-raw-*.jsonl`: every raw TFT `new-info-update` and `new-game-event`
+  payload received from GEP, plus lifecycle/error records.
+- `tft-ia-payloads-*.jsonl`: every full canonical v2 envelope that would be
+  supplied to IA, one payload per line (not deltas or deduplicated snapshots).
+
+Both streams pass through the credential/privacy sanitizer. Tokens, credentials,
+passwords, secrets, authorization values, PUUIDs and account identifiers are
+removed. The files have independent write queues and can be compared by capture
+time, game ID, session/revision and resulting state changes. No policy inference
+or game action is executed in this capture-only phase.
