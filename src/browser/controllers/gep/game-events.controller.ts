@@ -201,7 +201,6 @@ export class GameEventsController extends PackageControllerBase {
       if (gameId === kGepSupportedGameIds.TeamfightTactics) {
         void this._auditRecorder.recordLifecycle(gameId, 'game-exit', { name, pid });
         this._lastLoggedSnapshotRevision = -1;
-        this._recorderPathLogged = false;
       }
       this._gepService.onGameExit(gameId);
     });
