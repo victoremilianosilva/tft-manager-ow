@@ -170,9 +170,11 @@ export class GameEventsController extends PackageControllerBase {
 
     this._gepApi.on('new-game-event', (event, reportedGameId, data) => {
       const gameId = normalizeGepGameId(reportedGameId);
-      // TFT game events are intentionally excluded from the AI JSONL stream.
-      // Keep forwarding non-TFT events for existing integrations only.
-      if (gameId !== kGepSupportedGameIds.TeamfightTactics) {
+      // Only meaningful round boundaries are projected into strategic state.
+      // Combat start/end and raw GEP event payloads are not persisted.
+      if (gameId === kGepSupportedGameIds.TeamfightTactics) {
+        this._gepService.handleTftGameEvent(gameId, data);
+      } else {
         this.emit('gep-event', { gameId, data });
       }
     });
