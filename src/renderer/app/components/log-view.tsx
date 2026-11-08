@@ -7,6 +7,19 @@ const LogView: FC = () => {
   const { logMessages, clearMessages } = useContext(AppContext)?.logs;
   const [autoScroll, setAutoScroll] = useState(true);
   const [search, setSearch] = useState('');
+  const [iaTest, setIaTest] = useState<{ ok: boolean; endpoint: string; message: string } | null>(null);
+  const [testingIa, setTestingIa] = useState(false);
+
+  const testIaConnection = async () => {
+    setTestingIa(true);
+    try {
+      setIaTest(await window.gep.testIaConnection());
+    } catch (error) {
+      setIaTest({ ok: false, endpoint: 'http://127.0.0.1:8765', message: error instanceof Error ? error.message : String(error) });
+    } finally {
+      setTestingIa(false);
+    }
+  };
   const logRef = useRef<HTMLDivElement>(null);
 
   const filteredMessages = useMemo(() => {
@@ -37,6 +50,14 @@ const LogView: FC = () => {
       />
       <div className="page-inner">
         <div className="log-toolbar">
+          <button onClick={testIaConnection} className="btn-secondary" disabled={testingIa}>
+            {testingIa ? "Testando IA..." : "Testar comunicação IA"}
+          </button>
+          {iaTest && (
+            <span className={iaTest.ok ? "log-search-count" : "log-entry error"}>
+              {iaTest.ok ? "Conectado" : "Desconectado"} — {iaTest.endpoint} — {iaTest.message}
+            </span>
+          )}
           <input
             className="log-search"
             type="text"
