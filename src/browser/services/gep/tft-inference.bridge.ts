@@ -79,7 +79,7 @@ export class TftInferenceBridge {
   }> {
     return new Promise((resolve, reject) => {
       const url = new URL(route, this.endpoint);
-      const hostname = url.hostname.replace(/^\\[|\\]$/g, '');
+      const hostname = url.hostname.replace(/^\[|\]$/g, '');
       if (url.protocol !== 'http:' || url.username || url.password ||
           (hostname !== '127.0.0.1' && hostname !== 'localhost' && hostname !== '::1')) {
         reject(new Error('TFT_IA_URL must point to localhost; remote endpoints are blocked.'));
