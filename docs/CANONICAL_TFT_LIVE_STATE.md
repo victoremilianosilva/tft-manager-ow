@@ -48,3 +48,20 @@ The current GEP capture does not provide trustworthy current boards for all seve
 opponents, opponent gold/level/shop, or persistent composition strategy state.
 Those remain explicitly unknown. Historical `match_stats.board_players` must not
 be substituted for current opponent boards.
+
+
+## Local inference transport
+
+The Electron main process forwards each already-normalized snapshot to
+`http://127.0.0.1:8765/v1/snapshot`. The endpoint can be overridden with
+`TFT_LIVE_INFERENCE_URL`, but it must remain an HTTP loopback URL ending in
+`/v1/snapshot`. Raw GEP feature trees are never sent over this bridge.
+
+The Python receiver must be started separately with
+`python -m live_inference.service --host 127.0.0.1 --port 8765`. If it is not
+running, Overwolf keeps recording canonical snapshots to JSONL and retries
+delivery after a short cooldown; the game capture path is not blocked.
+
+A successful HTTP delivery confirms only that the Python receiver validated
+and sequenced the canonical snapshot. It does not mean the native Engine has
+imported the state or that policy inference is available.
