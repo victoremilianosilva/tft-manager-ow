@@ -61,11 +61,18 @@ declare global {
     onInitFailed: (cb: (info: { name: string; reason: string }) => void) => void;
   }
 
+  interface TftIaConnectionTest {
+    ok: boolean;
+    endpoint: string;
+    statusCode?: number;
+    message: string;
+  }
+
   interface Window {
     recorder: Recorder;
     overlay: IOverlayApi;
     app: IDesktopAppApi;
-    gep: any;
+    gep: { setRequiredFeature: () => Promise<void>; getInfo: () => Promise<unknown>; testIaConnection: () => Promise<TftIaConnectionTest> };
     osr: any;
     electronAPI: ElectronAPI;
     privacyApi: IPrivacyApi;
