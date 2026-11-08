@@ -4,12 +4,16 @@ import { SvgIcons } from '../app/styles/icons';
 import OverlayWindowStyles from '../app/styles/overlay-window-styles';
 import OverlayWindowHeader from './components/osr-window-header';
 import GEPLogsDisplay from './components/gepLogger';
+import TFTCoachOverlay from './components/tft-coach-overlay';
 import MoreActionsButtons from './components/more-actions-buttons';
 import Ad from '../app/components/ads-tester/ad';
 import OverlayWindowSettings from './components/overlay-window-settings';
 import { GepLogsProvider } from '../app/context/gep-logs-context';
 
 const container = document.getElementById('osr-root');
+if (!container) {
+  throw new Error('OSR root element was not found.');
+}
 
 const root = createRoot(container);
 
@@ -18,13 +22,12 @@ root.render(
     <div className="overlay-window-wrapper">
       <SvgIcons />
       <OverlayWindowStyles />
-
       <OverlayWindowHeader />
 
       <main>
+        <TFTCoachOverlay />
         <GEPLogsDisplay />
         <OverlayWindowSettings />
-
         <Ad
           adSize={[400, 300]}
           id={'ad-container'}
@@ -39,3 +42,4 @@ root.render(
     </div>
   </GepLogsProvider>,
 );
+

@@ -30,6 +30,7 @@ export class GameEventsService extends EventEmitter {
   private _activeGame = 0;
   private _gepGamesId: number[] = [];
   private _tftSnapshotManager?: TftSnapshotManager;
+  private _roundBoundaryIndex = 0;
 
   constructor(gepApi: OverwolfGameEventPackage) {
     super();
@@ -46,10 +47,11 @@ export class GameEventsService extends EventEmitter {
   ): Promise<void> {
     event.enable();
     this._activeGame = gameId;
+    if (gameId === kGepSupportedGameIds.TeamfightTactics) this._roundBoundaryIndex = 0;
 
     try {
       if (gameId === kGepSupportedGameIds.TeamfightTactics) {
-        await this.initializeTftCapture(gameId);
+        await this.initializeTftCaptureWithRetry(gameId);
       } else {
         await this._gepApi.setRequiredFeatures(gameId, undefined);
       }
@@ -62,6 +64,7 @@ export class GameEventsService extends EventEmitter {
   public onGameExit(gameId?: number): void {
     if (gameId !== undefined && gameId !== this._activeGame) return;
     this._activeGame = 0;
+    this._roundBoundaryIndex = 0;
     this._tftSnapshotManager?.markIncomplete();
     this._tftSnapshotManager = undefined;
     this.emit('tft-snapshot-reset');
@@ -75,6 +78,53 @@ export class GameEventsService extends EventEmitter {
 
     const snapshot = this._tftSnapshotManager.applyInfoUpdate(data);
     if (snapshot) this.emit('tft-snapshot', snapshot);
+  }
+
+  /**
+   * Preserve round boundaries as compact state, but discard per-combat events.
+   * This gives the AI phase context without writing the raw GEP event stream.
+   */
+  public handleTftGameEvent(gameId: number, data: unknown): void {
+    if (
+      gameId !== kGepSupportedGameIds.TeamfightTactics ||
+      !this._tftSnapshotManager ||
+      !data || typeof data !== 'object'
+    ) return;
+
+    const event = data as Record<string, unknown>;
+    if (event.feature !== 'match_info') return;
+    if (event.key !== 'round_start' && event.key !== 'round_end') return;
+
+    this._roundBoundaryIndex += 1;
+    const phase = event.key === 'round_start'
+      ? `ROUND_START_${String(event.value ?? 'UNKNOWN')}`
+      : 'ROUND_END';
+    const snapshot = this._tftSnapshotManager.applyInfoUpdate({
+      info: {
+        round_flow: {
+          boundaryIndex: this._roundBoundaryIndex,
+          phase,
+        },
+      },
+    });
+    if (snapshot) this.emit('tft-snapshot', snapshot);
+  }
+
+  private async initializeTftCaptureWithRetry(gameId: number, attempts = 3): Promise<void> {
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= attempts; attempt += 1) {
+      try {
+        await this.initializeTftCapture(gameId);
+        return;
+      } catch (error) {
+        lastError = error;
+        this.emit('gep-retry', { gameId, attempt, attempts, error });
+        if (attempt < attempts) {
+          await new Promise(resolve => setTimeout(resolve, 500 * attempt));
+        }
+      }
+    }
+    throw lastError;
   }
 
   private async initializeTftCapture(gameId: number): Promise<void> {
@@ -108,6 +158,7 @@ export class GameEventsService extends EventEmitter {
     // baseline so that the newest values take precedence.
     try {
       const baseline = await this._gepApi.getInfo(gameId);
+      this.emit('tft-raw-gep', { event: 'getInfo-baseline', gameId, payload: baseline });
       if (this._tftSnapshotManager !== manager) return;
       this.emit('tft-snapshot', manager.finishReconciliation(baseline));
     } catch (error) {
@@ -133,6 +184,7 @@ export class GameEventsService extends EventEmitter {
     manager.beginReconciliation();
     try {
       const baseline = await this._gepApi.getInfo(gameId);
+      this.emit('tft-raw-gep', { event: 'getInfo-reconcile', gameId, payload: baseline });
       if (this._tftSnapshotManager !== manager || this._activeGame !== gameId) {
         return null;
       }
@@ -170,7 +222,7 @@ export class GameEventsService extends EventEmitter {
     if (!this._gepApi) return;
     for (const gameId of this._gepGamesId) {
       if (gameId === kGepSupportedGameIds.TeamfightTactics) {
-        await this.initializeTftCapture(gameId);
+        await this.initializeTftCaptureWithRetry(gameId);
       }
     }
   }
