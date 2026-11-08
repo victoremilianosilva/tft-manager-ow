@@ -18,7 +18,7 @@ const mapperCompiled = ts.transpile(mapperSource, { module: ts.ModuleKind.Common
 const mapperModule = { exports: {} };
 new Function('exports', 'require', 'module', mapperCompiled)(mapperModule.exports, require, mapperModule);
 const { TftSnapshotManager } = load('tft-snapshot.manager.ts').exports;
-function test(name, fn) { try { fn(); process.stdout.write('PASS ' + name + '\\n'); } catch (error) { process.stderr.write('FAIL ' + name + '\\n'); throw error; } }
+function test(name, fn) { try { fn(); process.stdout.write('PASS ' + name + '\n'); } catch (error) { process.stderr.write('FAIL ' + name + '\n'); throw error; } }
 function fixture() {
  return { info: {
   me: { me: { health: '84', gold: '35', xp: { level: 4, current_xp: 4, xp_max: 10 } } },
@@ -75,4 +75,4 @@ test('unknown domains remain explicitly unknown, not fabricated', () => {
  assert.strictEqual(snapshot.state.players[0], null);
  assert.strictEqual(snapshot.state.players.every(p => p === null || p.board.known === false), true);
 });
-process.stdout.write('All canonical TFT state mapper tests passed.\\n');
+process.stdout.write('All canonical TFT state mapper tests passed.\n');

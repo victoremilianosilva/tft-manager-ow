@@ -52,10 +52,10 @@ function mapSlots(source: unknown, prefix: string, size: number): { known: boole
 }
 function mapShop(source: unknown): { known: boolean; slots: KnownValue<string>[] } {
   if (!isRecord(source)) return { known: false, slots: [] };
-  const slots: KnownValue<string>[] = Array.from({ length: 5 }, () => known<string>(null));
+  const slots: KnownValue<string>[] = Array.from({ length: 5 }, () => ({ known: true, value: null }));
   for (const [key, value] of Object.entries(source)) {
     const index = slotNumber(key, "slot", 5);
-    if (index !== null) slots[index] = known(isRecord(value) ? textValue(value.name) : null);
+    if (index !== null) slots[index] = { known: true, value: isRecord(value) ? textValue(value.name) : null };
   }
   return { known: true, slots };
 }

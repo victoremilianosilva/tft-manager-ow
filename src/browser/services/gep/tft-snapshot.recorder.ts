@@ -48,6 +48,7 @@ export class TftSnapshotRecorder {
   private readonly outputFile: string;
   private writeQueue: Promise<void> = Promise.resolve();
   private lastState: unknown = null;
+  private lastRevision: number | null = null;
   private stateQueue: Promise<void> = Promise.resolve();
   private readonly sessionId: string;
 
@@ -73,11 +74,12 @@ export class TftSnapshotRecorder {
       } : {
         recordType: 'state_delta', capturedAt: safe.capturedAt,
         sessionId: this.sessionId, gameId: safe.gameId,
-        revision: safe.revision, parentRevision: safe.revision - 1,
+        revision: safe.revision, parentRevision: this.lastRevision,
         changes,
       };
       await this.append(entry);
       this.lastState = JSON.parse(JSON.stringify(safe.state));
+      this.lastRevision = safe.revision;
     });
     return this.stateQueue;
   }

@@ -41,7 +41,9 @@ export class GameEventsController extends PackageControllerBase {
           this.log('TFT snapshot updated', {
             revision: snapshot.revision,
             complete: snapshot.complete,
-            contract: snapshot.state.contract,\n            playerCount: snapshot.state.players.filter(Boolean).length,\n            localPlayerIndex: snapshot.state.localPlayerIndex.value,
+            contract: snapshot.state.contract,
+            playerCount: snapshot.state.players.filter(Boolean).length,
+            localPlayerIndex: snapshot.state.localPlayerIndex.value,
           });
           this._lastLoggedSnapshotRevision = snapshot.revision;
         }
@@ -165,7 +167,10 @@ export class GameEventsController extends PackageControllerBase {
         // Partial updates are merged; only strategic semantic changes are recorded.
         this._gepService.handleTftInfoUpdate(gameId, data);
       }
-      // TFT consumers receive only the canonical tft-snapshot contract.\n      if (gameId !== kGepSupportedGameIds.TeamfightTactics) {\n        this.emit('gep-info', { gameId, data });\n      }
+      // TFT consumers receive only the canonical tft-snapshot contract.
+      if (gameId !== kGepSupportedGameIds.TeamfightTactics) {
+        this.emit('gep-info', { gameId, data });
+      }
     });
 
     this._gepApi.on('new-game-event', (event, reportedGameId, data) => {
