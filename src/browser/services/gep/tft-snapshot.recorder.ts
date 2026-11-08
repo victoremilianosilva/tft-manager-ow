@@ -5,16 +5,14 @@ import { TftGepSnapshot } from './tft-snapshot.manager';
 
 export type TftCaptureRecordKind = 'state_snapshot' | 'state_delta' | 'lifecycle' | 'capture_error';
 
-/** Remove credentials and account identifiers before any serialization. */
 export function sanitizeTftPayload(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(sanitizeTftPayload);
   if (!value || typeof value !== 'object') return value;
   const result: Record<string, unknown> = {};
   for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
     const normalized = key.toLowerCase().replace(/[^a-z0-9]/g, '');
-    if (normalized === 'token' || normalized === 'credentials' ||
-        normalized === 'lcuinfo' || normalized.includes('puuid') ||
-        normalized === 'accountid' || normalized === 'summonerid' ||
+    if (normalized === 'token' || normalized === 'credentials' || normalized === 'lcuinfo' ||
+        normalized.includes('puuid') || normalized === 'accountid' || normalized === 'summonerid' ||
         normalized === 'platformid' || normalized === 'riotid') continue;
     if (normalized === 'augments' || normalized === 'augmentchoices') {
       result[key] = '[redacted: Overwolf TFT GEP display restriction]';
@@ -24,7 +22,9 @@ export function sanitizeTftPayload(value: unknown): unknown {
 }
 
 function flatten(value: unknown, prefix = '', output: Record<string, unknown> = {}): Record<string, unknown> {
-  if (value && typeof value === 'object' && !Array.isArray(value)) {
+  if (Array.isArray(value)) {
+    value.forEach((nested, index) => flatten(nested, prefix ? prefix + '.' + index : String(index), output));
+  } else if (value && typeof value === 'object') {
     for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
       flatten(nested, prefix ? prefix + '.' + key : key, output);
     }
@@ -32,8 +32,7 @@ function flatten(value: unknown, prefix = '', output: Record<string, unknown> = 
   return output;
 }
 function diffState(previous: unknown, next: unknown): Record<string, unknown> {
-  const before = flatten(previous);
-  const after = flatten(next);
+  const before = flatten(previous), after = flatten(next);
   const changes: Record<string, unknown> = {};
   for (const key of Object.keys(after)) {
     if (JSON.stringify(before[key]) !== JSON.stringify(after[key])) changes[key] = after[key];
@@ -42,7 +41,6 @@ function diffState(previous: unknown, next: unknown): Record<string, unknown> {
   return changes;
 }
 
-/** Writes a full baseline followed only by compact semantic state deltas. */
 export class TftSnapshotRecorder {
   private readonly outputDirectory: string;
   private readonly outputFile: string;
@@ -61,8 +59,6 @@ export class TftSnapshotRecorder {
   }
 
   public record(snapshot: TftGepSnapshot): Promise<void> {
-    // Serialize state comparisons as well as writes so concurrent GEP updates
-    // cannot produce two baselines or advance the diff cursor after a failed write.
     this.stateQueue = this.stateQueue.catch(() => undefined).then(async () => {
       const safe = sanitizeTftPayload(snapshot) as TftGepSnapshot;
       const matchId = safe.state.matchId?.known ? safe.state.matchId.value : null;
@@ -70,7 +66,6 @@ export class TftSnapshotRecorder {
         (matchId !== null && this.lastMatchId !== matchId);
       const changes = initial ? null : diffState(this.lastState, safe.state);
       if (!initial && (!changes || Object.keys(changes).length === 0)) return;
-
       const entry = initial ? {
         recordType: 'state_snapshot', capturedAt: safe.capturedAt,
         sessionId: this.sessionId, gameSessionId: safe.sessionId, gameId: safe.gameId,
@@ -78,8 +73,7 @@ export class TftSnapshotRecorder {
       } : {
         recordType: 'state_delta', capturedAt: safe.capturedAt,
         sessionId: this.sessionId, gameSessionId: safe.sessionId, gameId: safe.gameId,
-        revision: safe.revision, parentRevision: this.lastRevision,
-        changes,
+        revision: safe.revision, parentRevision: this.lastRevision, changes,
       };
       await this.append(entry);
       this.lastState = JSON.parse(JSON.stringify(safe.state));
@@ -97,7 +91,6 @@ export class TftSnapshotRecorder {
       payload: sanitizeTftPayload({ event, data: payload ?? null }),
     });
   }
-
   public recordError(gameId: number, error: unknown, details?: unknown): Promise<void> {
     return this.append({
       recordType: 'capture_error', capturedAt: new Date().toISOString(),
@@ -108,7 +101,6 @@ export class TftSnapshotRecorder {
       }),
     });
   }
-
   private append(entry: unknown): Promise<void> {
     const line = JSON.stringify(entry) + '\n';
     this.writeQueue = this.writeQueue.catch(() => undefined).then(async () => {
