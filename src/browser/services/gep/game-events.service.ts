@@ -158,6 +158,7 @@ export class GameEventsService extends EventEmitter {
     // baseline so that the newest values take precedence.
     try {
       const baseline = await this._gepApi.getInfo(gameId);
+      this.emit('tft-raw-gep', { event: 'getInfo-baseline', gameId, payload: baseline });
       if (this._tftSnapshotManager !== manager) return;
       this.emit('tft-snapshot', manager.finishReconciliation(baseline));
     } catch (error) {
@@ -183,6 +184,7 @@ export class GameEventsService extends EventEmitter {
     manager.beginReconciliation();
     try {
       const baseline = await this._gepApi.getInfo(gameId);
+      this.emit('tft-raw-gep', { event: 'getInfo-reconcile', gameId, payload: baseline });
       if (this._tftSnapshotManager !== manager || this._activeGame !== gameId) {
         return null;
       }

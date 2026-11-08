@@ -1,0 +1,27 @@
+name: TFT canonical live-state
+on:
+  push:
+    branches:
+      - feat/ow-canonical-tft-state-v2
+  pull_request:
+    branches:
+      - feat/tft-ai-state-snapshots
+jobs:
+  canonical-state:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: yarn
+      - name: Enable Yarn
+        run: corepack enable
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+      - name: Test canonical GEP mapper
+        run: yarn test:gep
+      - name: Build Electron main process
+        run: yarn build:main

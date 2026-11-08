@@ -1,7 +1,7 @@
 import { app, ipcMain } from 'electron';
 import { PackageControllerBase } from '../base.controller';
 import { GameEventsService } from '../../services/gep/game-events.service';
-import { TftSnapshotRecorder, sanitizeTftPayload } from '../../services/gep/tft-snapshot.recorder';
+import { TftDualAuditRecorder } from '../../services/gep/tft-snapshot.recorder';
 import { OverwolfGameEventPackage } from '@overwolf/ow-electron-packages-types';
 import { kGepSupportedGameIds } from '@overwolf/ow-electron-packages-types/gep-supported-games';
 import { normalizeGepGameId } from '../../services/gep/tft-game-id';
@@ -10,10 +10,9 @@ import { normalizeGepGameId } from '../../services/gep/tft-game-id';
 export class GameEventsController extends PackageControllerBase {
   private _gepService: GameEventsService;
   private _gepApi: OverwolfGameEventPackage;
-  private _snapshotRecorder: TftSnapshotRecorder;
+  private _auditRecorder: TftDualAuditRecorder;
   private _registeredGameIds: number[] = [];
   private _lastLoggedSnapshotRevision = -1;
-  private _recorderPathLogged = false;
   private _gepListenersRegistered = false;
 
   constructor() {
@@ -27,11 +26,18 @@ export class GameEventsController extends PackageControllerBase {
     this.log('GEP package ready; attaching TFT detection listeners');
     if (!this._gepService) {
       this._gepService = new GameEventsService(this._gepApi);
-      this._snapshotRecorder = new TftSnapshotRecorder();
+      this._auditRecorder = new TftDualAuditRecorder();
+      this.log('TFT raw GEP JSONL', this._auditRecorder.getRawFilePath());
+      this.log('TFT canonical IA JSONL', this._auditRecorder.getInferenceFilePath());
       this._gepService.on('tft-features-ready', details => {
         this.log('TFT GEP features configured', details);
-        void this._snapshotRecorder.recordLifecycle(kGepSupportedGameIds.TeamfightTactics, 'features-ready', details);
+        void this._auditRecorder.recordLifecycle(kGepSupportedGameIds.TeamfightTactics, 'features-ready', details);
         this.emit('tft-features-ready', details);
+      });
+      this._gepService.on('tft-raw-gep', record => {
+        void this._auditRecorder.recordRawGepEvent(record.event, record.gameId, record.payload).catch(error => {
+          this.error('Failed to persist raw GEP baseline', error);
+        });
       });
       this._gepService.on('tft-snapshot', snapshot => {
         if (
@@ -41,24 +47,22 @@ export class GameEventsController extends PackageControllerBase {
           this.log('TFT snapshot updated', {
             revision: snapshot.revision,
             complete: snapshot.complete,
-            topLevelFeatures: Object.keys(snapshot.info ?? {}),
+            contract: snapshot.state.contract,
+            playerCount: snapshot.state.players.filter(Boolean).length,
+            localPlayerIndex: snapshot.state.localPlayerIndex.value,
           });
           this._lastLoggedSnapshotRevision = snapshot.revision;
         }
 
-        void this._snapshotRecorder.record(snapshot).then(() => {
-          if (!this._recorderPathLogged) {
-            this.log('TFT JSONL capture file', this._snapshotRecorder.getFilePath());
-            this._recorderPathLogged = true;
-          }
-        }).catch(error => {
-          this.error('Failed to persist TFT snapshot', error);
+        // Persist every complete canonical payload that would be supplied to IA.
+        void this._auditRecorder.recordInferencePayload(snapshot).catch(error => {
+          this.error('Failed to persist canonical IA payload', error);
         });
         this.emit('tft-snapshot', snapshot);
       });
       this._gepService.on('tft-snapshot-incomplete', details => {
         this.warn('TFT snapshot baseline is incomplete', details);
-        void this._snapshotRecorder.recordError(
+        void this._auditRecorder.recordError(
           kGepSupportedGameIds.TeamfightTactics,
           'TFT snapshot baseline is incomplete',
           details,
@@ -67,7 +71,7 @@ export class GameEventsController extends PackageControllerBase {
       });
       this._gepService.on('gep-error', details => {
         this.error('GEP capture error', details);
-        void this._snapshotRecorder.recordError(
+        void this._auditRecorder.recordError(
           kGepSupportedGameIds.TeamfightTactics,
           (details as any)?.error ?? 'GEP capture error',
           details,
@@ -75,7 +79,7 @@ export class GameEventsController extends PackageControllerBase {
       });
       this._gepService.on('gep-retry', details => {
         this.warn('Retrying TFT GEP initialization', details);
-        void this._snapshotRecorder.recordLifecycle(
+        void this._auditRecorder.recordLifecycle(
           kGepSupportedGameIds.TeamfightTactics,
           'feature-initialization-retry',
           details,
@@ -132,7 +136,7 @@ export class GameEventsController extends PackageControllerBase {
         this.log('TFT CLIENT IDENTIFIED BY GEP', { name, reportedGameId, canonicalGepGameId: gameId });
         // Create the session JSONL at detection time, before waiting for the
         // first info update or baseline snapshot.
-        void this._snapshotRecorder.recordLifecycle(gameId, 'game-detected', {
+        void this._auditRecorder.recordLifecycle(gameId, 'game-detected', {
           name,
           reportedGameId,
           canonicalGepGameId: gameId,
@@ -149,7 +153,7 @@ export class GameEventsController extends PackageControllerBase {
           `Elevated privileges required for game ${name} (reportedGameId: ${reportedGameId}, canonicalGepGameId: ${gameId}, pid: ${pid})`,
         );
         if (gameId === kGepSupportedGameIds.TeamfightTactics) {
-          void this._snapshotRecorder.recordLifecycle(gameId, 'elevated-privileges-required', {
+          void this._auditRecorder.recordLifecycle(gameId, 'elevated-privileges-required', {
             name,
             pid,
             reportedGameId,
@@ -162,17 +166,25 @@ export class GameEventsController extends PackageControllerBase {
     this._gepApi.on('new-info-update', (event, reportedGameId, data) => {
       const gameId = normalizeGepGameId(reportedGameId);
       if (gameId === kGepSupportedGameIds.TeamfightTactics) {
-        // Partial updates are merged; only strategic semantic changes are recorded.
+        // Persist the original GEP update before projecting it into canonical state.
+        void this._auditRecorder.recordRawGepEvent('new-info-update', gameId, data).catch(error => {
+          this.error('Failed to persist raw GEP info update', error);
+        });
         this._gepService.handleTftInfoUpdate(gameId, data);
       }
-      this.emit('gep-info', { gameId, data: gameId === kGepSupportedGameIds.TeamfightTactics ? sanitizeTftPayload(data) : data });
+      // TFT consumers receive only the canonical tft-snapshot contract.
+      if (gameId !== kGepSupportedGameIds.TeamfightTactics) {
+        this.emit('gep-info', { gameId, data });
+      }
     });
 
     this._gepApi.on('new-game-event', (event, reportedGameId, data) => {
       const gameId = normalizeGepGameId(reportedGameId);
-      // Only meaningful round boundaries are projected into strategic state.
-      // Combat start/end and raw GEP event payloads are not persisted.
+      // Preserve raw GEP event JSON for later action reconstruction and comparison.
       if (gameId === kGepSupportedGameIds.TeamfightTactics) {
+        void this._auditRecorder.recordRawGepEvent('new-game-event', gameId, data).catch(error => {
+          this.error('Failed to persist raw GEP game event', error);
+        });
         this._gepService.handleTftGameEvent(gameId, data);
       } else {
         this.emit('gep-event', { gameId, data });
@@ -183,7 +195,7 @@ export class GameEventsController extends PackageControllerBase {
       const gameId = normalizeGepGameId(reportedGameId);
       this.error(`GEP error for game ${gameId} (reported ID: ${reportedGameId}): ${error}`, ...args);
       if (gameId === kGepSupportedGameIds.TeamfightTactics) {
-        void this._snapshotRecorder.recordError(gameId, error, args).catch(() => undefined);
+        void this._auditRecorder.recordError(gameId, error, args).catch(() => undefined);
       }
       this.emit('gep-error', { gameId, error, args });
     });
@@ -192,9 +204,8 @@ export class GameEventsController extends PackageControllerBase {
       const gameId = normalizeGepGameId(reportedGameId);
       this.log(`Game exit: ${name} (reportedGameId: ${reportedGameId}, canonicalGepGameId: ${gameId}, pid: ${pid})`);
       if (gameId === kGepSupportedGameIds.TeamfightTactics) {
-        void this._snapshotRecorder.recordLifecycle(gameId, 'game-exit', { name, pid });
+        void this._auditRecorder.recordLifecycle(gameId, 'game-exit', { name, pid });
         this._lastLoggedSnapshotRevision = -1;
-        this._recorderPathLogged = false;
       }
       this._gepService.onGameExit(gameId);
     });
