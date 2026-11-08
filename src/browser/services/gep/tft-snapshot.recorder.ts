@@ -144,6 +144,16 @@ export class TftDualAuditRecorder {
     return this.rawQueue;
   }
 
+  public recordLifecycle(gameId: number, event: string, payload?: unknown): Promise<void> {
+    return this.recordRawGepEvent('lifecycle:' + event, gameId, payload ?? null);
+  }
+
+  public recordError(gameId: number, error: unknown, details?: unknown): Promise<void> {
+    return this.recordRawGepEvent('capture-error', gameId, {
+      message: error instanceof Error ? error.message : String(error), details: details ?? null,
+    });
+  }
+
   public recordInferencePayload(snapshot: TftGepSnapshot): Promise<void> {
     const entry = {
       recordType: 'canonical_ia_payload',
