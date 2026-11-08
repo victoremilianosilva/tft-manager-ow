@@ -34,6 +34,11 @@ export class GameEventsController extends PackageControllerBase {
         void this._auditRecorder.recordLifecycle(kGepSupportedGameIds.TeamfightTactics, 'features-ready', details);
         this.emit('tft-features-ready', details);
       });
+      this._gepService.on('tft-raw-gep', record => {
+        void this._auditRecorder.recordRawGepEvent(record.event, record.gameId, record.payload).catch(error => {
+          this.error('Failed to persist raw GEP baseline', error);
+        });
+      });
       this._gepService.on('tft-snapshot', snapshot => {
         if (
           snapshot.revision === 1 ||
