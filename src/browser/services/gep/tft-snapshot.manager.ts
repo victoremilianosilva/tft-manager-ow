@@ -7,7 +7,7 @@ export interface TftGepSnapshot {
   capturedAt: string; complete: boolean; info: Record<string, any>;
 }
 type UnknownRecord = Record<string, any>;
-const BLOCKED_FEATURES = new Set(['battle', 'combat', 'battle_stats']);
+const BLOCKED_FEATURES = new Set(['battle', 'combat', 'battle_stats', 'local_player_damage', 'damage', 'lcu_info', 'lcuinfo']);
 const BLOCKED_KEYS = new Set([
   'token','credentials','lcu_info','lcuinfo','puuid','account_id','accountid',
   'summoner_id','summonerid','player_puuid','riot_id','platform_id',
