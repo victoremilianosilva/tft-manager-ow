@@ -15,15 +15,38 @@ export interface TftBridgeHealth {
  */
 export class TftInferenceBridge {
   private readonly endpoint = process.env.TFT_IA_URL || 'http://127.0.0.1:8765';
-  private queue: Promise<void> = Promise.resolve();
+  private pendingSnapshot: TftGepSnapshot | null = null;
+  private sending = false;
+  private retryAfter = 0;
   private lastFailureLogAt = 0;
 
   public sendSnapshot(snapshot: TftGepSnapshot): Promise<void> {
-    this.queue = this.queue.catch(() => undefined).then(async () => {
+    if (Date.now() < this.retryAfter) return Promise.resolve();
+    if (this.sending) {
+      // Keep only the newest complete state; never build an unbounded backlog.
+      this.pendingSnapshot = snapshot;
+      return Promise.resolve();
+    }
+    this.sending = true;
+    return this.deliver(snapshot).finally(() => {
+      this.sending = false;
+      const pending = this.pendingSnapshot;
+      this.pendingSnapshot = null;
+      if (pending && Date.now() >= this.retryAfter) {
+        void this.sendSnapshot(pending).catch(() => undefined);
+      }
+    });
+  }
+
+  private async deliver(snapshot: TftGepSnapshot): Promise<void> {
+    try {
       const result = await this.request('POST', '/v1/snapshot', snapshot);
       if (!result.ok) throw new Error(result.message);
-    });
-    return this.queue;
+      this.retryAfter = 0;
+    } catch (error) {
+      this.retryAfter = Date.now() + 5000;
+      throw error;
+    }
   }
 
   public async testConnection(): Promise<TftBridgeHealth> {
@@ -56,7 +79,9 @@ export class TftInferenceBridge {
   }> {
     return new Promise((resolve, reject) => {
       const url = new URL(route, this.endpoint);
-      if (url.hostname !== '127.0.0.1' && url.hostname !== 'localhost' && url.hostname !== '::1') {
+      const hostname = url.hostname.replace(/^\\[|\\]$/g, '');
+      if (url.protocol !== 'http:' || url.username || url.password ||
+          (hostname !== '127.0.0.1' && hostname !== 'localhost' && hostname !== '::1')) {
         reject(new Error('TFT_IA_URL must point to localhost; remote endpoints are blocked.'));
         return;
       }
