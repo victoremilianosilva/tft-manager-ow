@@ -132,3 +132,6 @@ dist
 .yarn/build-state.yml
 .yarn/install-state.gz
 .pnp.*
+
+# Local TFT match captures may contain private client data.
+tft-match/*.jsonl
