@@ -98,7 +98,7 @@ export function mapGepInfoToCanonicalState(info: unknown): CanonicalTftState {
   const rawMatchId = get(info, "match_info", "match_info", "match_id");
   const matchId = textValue(rawMatchId) ?? (numberValue(rawMatchId) === null ? null : String(numberValue(rawMatchId)));
   const roundText = textValue(get(info, "match_info", "match_info", "round_type", "stage"));
-  const roundMatch = roundText ? /^(\\d+)-(\\d+)$/.exec(roundText) : null;
+  const roundMatch = roundText ? /^(\d+)-(\d+)$/.exec(roundText) : null;
   const players: Array<CanonicalPlayer | null> = Array.from({ length: 8 }, (_, index) => {
     const entry = rosterEntries.find(([, value]) => isRecord(value) && numberValue(value.index) === index);
     if (!entry) return null;
