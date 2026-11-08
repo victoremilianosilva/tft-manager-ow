@@ -2,10 +2,11 @@ name: TFT canonical live-state
 on:
   push:
     branches:
-      - feat/ow-canonical-tft-state-v2
+      - main
+      - 'feat/**'
   pull_request:
     branches:
-      - feat/tft-ai-state-snapshots
+      - main
 jobs:
   canonical-state:
     runs-on: ubuntu-latest
