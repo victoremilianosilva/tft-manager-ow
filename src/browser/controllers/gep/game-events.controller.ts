@@ -1,7 +1,7 @@
 import { app, ipcMain } from 'electron';
 import { PackageControllerBase } from '../base.controller';
 import { GameEventsService } from '../../services/gep/game-events.service';
-import { TftSnapshotRecorder, sanitizeTftPayload } from '../../services/gep/tft-snapshot.recorder';
+import { TftSnapshotRecorder } from '../../services/gep/tft-snapshot.recorder';
 import { OverwolfGameEventPackage } from '@overwolf/ow-electron-packages-types';
 import { kGepSupportedGameIds } from '@overwolf/ow-electron-packages-types/gep-supported-games';
 import { normalizeGepGameId } from '../../services/gep/tft-game-id';
