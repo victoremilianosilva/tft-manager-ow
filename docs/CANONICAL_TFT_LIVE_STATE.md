@@ -11,7 +11,7 @@ this contract; neither is allowed to map GEP names such as `me.me.gold` or
 ## Envelope v2
 
 - `schemaVersion: 2`
-- `gameId`, `revision`, `capturedAt`, `complete`
+- `gameId`, `sessionId`, `revision`, `capturedAt`, `complete`
 - `state`: `contract: "tft.live-state"`, `contractVersion: 1`
 
 Each scalar uses `{ known, value }`. Unknown is `{known:false,value:null}`;
@@ -38,9 +38,10 @@ source features remain unknown and are never synthesized.
 ## Compatibility
 
 Schema v1 carried raw `info` and is no longer accepted by the inference service.
-The producer emits v2 canonical state only. The inference boundary validates
+The producer emits v2 canonical state only. The Python validation boundary checks
 shape, version, revision, finite values and sensitive-key absence; it does not
-interpret GEP paths.
+interpret GEP paths. The receiver currently validates and sequences snapshots only;
+it does not make native observations, masks or PPO recommendations available.
 
 ## Known unavailable fields
 
@@ -49,22 +50,28 @@ opponents, opponent gold/level/shop, or persistent composition strategy state.
 Those remain explicitly unknown. Historical `match_stats.board_players` must not
 be substituted for current opponent boards.
 
-
 ## Offline dual JSONL audit (no network transport)
 
-The Overwolf-to-Python HTTP bridge is disabled and removed. Overwolf does not
-connect to Python, localhost, or any external inference endpoint.
+The Overwolf-to-Python HTTP bridge is disabled. The active Overwolf controller
+does not connect to Python, localhost, or any external inference endpoint.
 
-Two independent JSONL files are written under the app's `userData/tft-snapshots`
-directory:
+The active `GameEventsController` uses `TftDualAuditRecorder` to write two
+independent JSONL files under the app's `userData/tft-snapshots` directory:
 
-- `tft-gep-raw-*.jsonl`: every raw TFT `new-info-update` and `new-game-event`
-  payload received from GEP, plus lifecycle/error records.
-- `tft-ia-payloads-*.jsonl`: every full canonical v2 envelope that would be
-  supplied to IA, one payload per line (not deltas or deduplicated snapshots).
+- `tft-gep-raw-*.jsonl`: sanitized raw TFT `new-info-update` and
+  `new-game-event` payloads, `getInfo()` baseline/reconciliation records,
+  plus lifecycle/error records.
+- `tft-ia-payloads-*.jsonl`: each full canonical v2 envelope intended for IA,
+  one payload per emitted snapshot (not deltas or deduplicated snapshots).
 
-Both streams pass through the credential/privacy sanitizer. Tokens, credentials,
-passwords, secrets, authorization values, PUUIDs and account identifiers are
-removed. The files have independent write queues and can be compared by capture
-time, game ID, session/revision and resulting state changes. No policy inference
+Each stream has an independent write queue and can be compared by capture time,
+game ID, audit session, game session, match ID and revision. No policy inference
 or game action is executed in this capture-only phase.
+
+**Privacy limitation:** the current sanitizer removes credentials, tokens,
+passwords, secrets, authorization values, PUUIDs and several account-ID fields,
+and redacts augment payloads. It does not currently redact `summoner_name` or
+all player-name fields from the raw GEP stream. Raw JSONL files must therefore be
+treated as potentially identifying data and must not be committed or shared
+publicly. The canonical state projection omits player names and account
+identifiers, but that does not anonymize the separate raw event stream.
