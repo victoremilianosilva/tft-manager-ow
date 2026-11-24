@@ -16,9 +16,27 @@ export function sanitizeTftPayload(value: unknown): unknown {
         normalized.includes('secret') || normalized.includes('authorization') || normalized === 'auth' ||
         normalized.includes('apikey') || normalized.includes('cookie') || normalized === 'lcuinfo' ||
         normalized.includes('puuid') || normalized.includes('accountid') || normalized.includes('summonerid') ||
-        normalized.includes('platformid') || normalized === 'riotid') continue;
+        normalized.includes('platformid') || normalized === 'riotid' ||
+        normalized === 'summoner' || normalized === 'summonername' ||
+        normalized === 'playername' || normalized === 'playerpuuid' ||
+        normalized === 'battle' || normalized === 'battlestats' ||
+        normalized === 'combat' || normalized === 'combatstats' ||
+        normalized === 'combattelemetry' || normalized === 'localplayerdamage' ||
+        normalized === 'damage' || normalized === 'damagestats') continue;
     if (normalized === 'augments' || normalized === 'augmentchoices') {
       result[key] = '[redacted: Overwolf TFT GEP display restriction]';
+    } else if (normalized === 'playerstatus' && nested && typeof nested === 'object' && !Array.isArray(nested)) {
+      // Roster keys are summoner display names. Preserve only the provider's
+      // numeric seat index so the raw capture remains pseudonymous.
+      const players: Record<string, unknown> = {};
+      for (const player of Object.values(nested as Record<string, unknown>)) {
+        if (!player || typeof player !== 'object' || Array.isArray(player)) continue;
+        const index = (player as Record<string, unknown>).index;
+        if (typeof index === 'number' && Number.isInteger(index) && index >= 0 && index < 8) {
+          players[`player_${index}`] = sanitizeTftPayload(player);
+        }
+      }
+      result[key] = players;
     } else result[key] = sanitizeTftPayload(nested);
   }
   return result;
@@ -243,7 +261,7 @@ export class TftDualAuditRecorder {
   }
 
   private appendReplay(recordType: string, payload: unknown): Promise<void> {
-    this.replayQueue = this.replayQueue.catch(() => undefined).then(async () => {
+    this.replayQueue = this.replayQueue.then(async () => {
       if (this.closed) throw new Error('TFT GEP replay capture is closed');
       const body = {
         sequence: this.replaySequence,
