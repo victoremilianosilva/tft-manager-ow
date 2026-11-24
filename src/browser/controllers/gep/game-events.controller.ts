@@ -38,7 +38,9 @@ export class GameEventsController extends PackageControllerBase {
       });
       this._gepService.on('tft-features-ready', details => {
         this.log('TFT GEP features configured', details);
-        void this._auditRecorder?.recordLifecycle(kGepSupportedGameIds.TeamfightTactics, 'features-ready', details);
+        void this._auditRecorder?.recordLifecycle(kGepSupportedGameIds.TeamfightTactics, 'features-ready', details).catch(error => {
+          this.error('Failed to persist TFT GEP feature lifecycle', error);
+        });
         this.emit('tft-features-ready', details);
       });
       this._gepService.on('tft-raw-gep', record => {
@@ -90,7 +92,7 @@ export class GameEventsController extends PackageControllerBase {
           kGepSupportedGameIds.TeamfightTactics,
           'feature-initialization-retry',
           details,
-        ).catch(() => undefined);
+        ).catch(error => this.error('Failed to persist TFT GEP retry lifecycle', error));
       });
     }
 
@@ -154,7 +156,7 @@ export class GameEventsController extends PackageControllerBase {
         this.log('TFT GEP replay capture JSONL', this._auditRecorder.getReplayFilePath());
         void this._auditRecorder.recordLifecycle(gameId, 'game-detected', {
           name, reportedGameId, canonicalGepGameId: gameId,
-        });
+        }).catch(error => this.error('Failed to persist TFT GEP game-start lifecycle', error));
       }
       void this._gepService.enableDetectedGame(event, gameId);
     });
@@ -172,7 +174,7 @@ export class GameEventsController extends PackageControllerBase {
             pid,
             reportedGameId,
             canonicalGepGameId: gameId,
-          });
+          }).catch(error => this.error('Failed to persist TFT GEP privilege lifecycle', error));
         }
       },
     );
