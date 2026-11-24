@@ -36,7 +36,6 @@ export class GameEventsController extends PackageControllerBase {
           this.error('Failed to finalize TFT GEP replay capture', error);
         }).finally(() => app.quit());
       });
-      this.log('TFT canonical IA JSONL', this._auditRecorder.getInferenceFilePath());
       this._gepService.on('tft-features-ready', details => {
         this.log('TFT GEP features configured', details);
         void this._auditRecorder?.recordLifecycle(kGepSupportedGameIds.TeamfightTactics, 'features-ready', details);
@@ -168,7 +167,7 @@ export class GameEventsController extends PackageControllerBase {
           `Elevated privileges required for game ${name} (reportedGameId: ${reportedGameId}, canonicalGepGameId: ${gameId}, pid: ${pid})`,
         );
         if (gameId === kGepSupportedGameIds.TeamfightTactics) {
-          void this._auditRecorder.recordLifecycle(gameId, 'elevated-privileges-required', {
+          void this._auditRecorder?.recordLifecycle(gameId, 'elevated-privileges-required', {
             name,
             pid,
             reportedGameId,
