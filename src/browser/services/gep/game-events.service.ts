@@ -81,8 +81,9 @@ export class GameEventsService extends EventEmitter {
   }
 
   /**
-   * Preserve round boundaries as compact state, but discard per-combat events.
-   * This gives the AI phase context without writing the raw GEP event stream.
+   * Project only round boundaries into the canonical AI state. The controller
+   * independently persists sanitized raw GEP events for observational audit;
+   * this method never projects blocked battle/combat telemetry into AI state.
    */
   public handleTftGameEvent(gameId: number, data: unknown): void {
     if (
