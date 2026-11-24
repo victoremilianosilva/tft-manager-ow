@@ -177,10 +177,9 @@ export class TftDualAuditRecorder {
   private closePromise: Promise<void> | null = null;
 
   constructor(private readonly gameId: number) {
-    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-    this.rawFile = path.join(this.outputDirectory, `tft-gep-raw-${stamp}.jsonl`);
-    this.inferenceFile = path.join(this.outputDirectory, `tft-ia-payloads-${stamp}.jsonl`);
-    this.replayFile = path.join(this.outputDirectory, `tft-gep-replay-${stamp}.jsonl`);
+    this.rawFile = path.join(this.outputDirectory, `tft-gep-raw-${this.sessionId}.jsonl`);
+    this.inferenceFile = path.join(this.outputDirectory, `tft-ia-payloads-${this.sessionId}.jsonl`);
+    this.replayFile = path.join(this.outputDirectory, `tft-gep-replay-${this.sessionId}.jsonl`);
     this.replayQueue = this.appendReplay('manifest', {
       replay_format: 'TFT_GEP_OBSERVATION_CAPTURE_V1',
       schema_version: 1,
