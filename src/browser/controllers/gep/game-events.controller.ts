@@ -14,6 +14,7 @@ export class GameEventsController extends PackageControllerBase {
   private _registeredGameIds: number[] = [];
   private _lastLoggedSnapshotRevision = -1;
   private _gepListenersRegistered = false;
+  private _shutdownRequested = false;
 
   constructor() {
     super('gep');
@@ -26,8 +27,17 @@ export class GameEventsController extends PackageControllerBase {
     this.log('GEP package ready; attaching TFT detection listeners');
     if (!this._gepService) {
       this._gepService = new GameEventsService(this._gepApi);
-      this._auditRecorder = new TftDualAuditRecorder();
+      this._auditRecorder = new TftDualAuditRecorder(kGepSupportedGameIds.TeamfightTactics);
       this.log('TFT raw GEP JSONL', this._auditRecorder.getRawFilePath());
+      this.log('TFT GEP replay capture JSONL', this._auditRecorder.getReplayFilePath());
+      app.on('before-quit', event => {
+        if (this._shutdownRequested) return;
+        event.preventDefault();
+        this._shutdownRequested = true;
+        void this._auditRecorder.close().catch(error => {
+          this.error('Failed to finalize TFT GEP replay capture', error);
+        }).finally(() => app.quit());
+      });
       this.log('TFT canonical IA JSONL', this._auditRecorder.getInferenceFilePath());
       this._gepService.on('tft-features-ready', details => {
         this.log('TFT GEP features configured', details);
