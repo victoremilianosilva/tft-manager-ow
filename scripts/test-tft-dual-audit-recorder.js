@@ -114,8 +114,8 @@ function verifyHashChain(lines) {
   verifyHashChain(interruptedLines);
   assert.strictEqual(JSON.parse(interruptedLines[interruptedLines.length - 1]).payload.complete, false);
 
-  process.stdout.write('All TFT hash-chained GEP replay recorder tests passed.\\n');
+  process.stdout.write('All TFT hash-chained GEP replay recorder tests passed.\n');
 })().catch(error => {
-  process.stderr.write(String(error && error.stack || error) + '\\n');
+  process.stderr.write(String(error && error.stack || error) + '\n');
   process.exitCode = 1;
 });
