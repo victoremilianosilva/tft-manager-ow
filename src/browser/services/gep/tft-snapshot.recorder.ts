@@ -172,7 +172,9 @@ export class TftDualAuditRecorder {
   private activeGameSessions = 0;
   private hasGameSession = false;
   private captureErrors = false;
+  private closing = false;
   private closed = false;
+  private closePromise: Promise<void> | null = null;
 
   constructor(private readonly gameId: number) {
     const stamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -194,6 +196,7 @@ export class TftDualAuditRecorder {
   }
 
   public recordRawGepEvent(event: string, gameId: number, payload: unknown): Promise<void> {
+    if (this.closing || this.closed) return Promise.reject(new Error('TFT GEP replay capture is closing'));
     const safePayload = sanitizeTftPayload(payload);
     const capturedAt = new Date().toISOString();
     const context = {
@@ -233,6 +236,7 @@ export class TftDualAuditRecorder {
   }
 
   public recordInferencePayload(snapshot: TftGepSnapshot): Promise<void> {
+    if (this.closing || this.closed) return Promise.reject(new Error('TFT GEP replay capture is closing'));
     const safe = sanitizeTftPayload(snapshot) as TftGepSnapshot;
     this.lastGameSessionId = safe.sessionId;
     this.lastMatchId = safe.state.matchId?.known && safe.state.matchId.value !== null
@@ -261,6 +265,13 @@ export class TftDualAuditRecorder {
   }
 
   private appendReplay(recordType: string, payload: unknown): Promise<void> {
+    if (this.closing || this.closed) {
+      return Promise.reject(new Error('TFT GEP replay capture is closing'));
+    }
+    return this.enqueueReplay(recordType, payload);
+  }
+
+  private enqueueReplay(recordType: string, payload: unknown): Promise<void> {
     this.replayQueue = this.replayQueue.then(async () => {
       if (this.closed) throw new Error('TFT GEP replay capture is closed');
       const body = {
@@ -288,18 +299,23 @@ export class TftDualAuditRecorder {
     await fs.promises.appendFile(file, JSON.stringify(entry) + '\n', { encoding: 'utf8' });
   }
 
-  public async close(): Promise<void> {
-    if (this.closed) return;
+  public close(): Promise<void> {
+    if (this.closePromise) return this.closePromise;
+    this.closing = true;
+    this.closePromise = this.finalize();
+    return this.closePromise;
+  }
+
+  private async finalize(): Promise<void> {
     await Promise.all([this.rawQueue, this.inferenceQueue, this.replayQueue]);
     const complete = this.hasGameSession &&
       this.activeGameSessions === 0 && !this.captureErrors;
-    await this.appendReplay('footer', {
+    await this.enqueueReplay('footer', {
       status: complete ? 'completed' : 'incomplete',
       records_before_footer: this.replaySequence,
       final_record_sha256: this.previousReplayHash,
       complete,
     });
-    await this.replayQueue;
     this.closed = true;
   }
 
