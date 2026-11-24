@@ -258,7 +258,7 @@ export class TftDualAuditRecorder {
       const line = bodyJson.slice(0, -1) +
         ',"record_sha256":' + JSON.stringify(recordHash) + '}';
       await fs.promises.mkdir(this.outputDirectory, { recursive: true });
-      await fs.promises.appendFile(this.replayFile, line + '\\n', { encoding: 'utf8' });
+      await fs.promises.appendFile(this.replayFile, line + '\n', { encoding: 'utf8' });
       this.replaySequence += 1;
       this.previousReplayHash = recordHash;
     });
@@ -267,7 +267,7 @@ export class TftDualAuditRecorder {
 
   private async append(file: string, entry: unknown): Promise<void> {
     await fs.promises.mkdir(this.outputDirectory, { recursive: true });
-    await fs.promises.appendFile(file, JSON.stringify(entry) + '\\n', { encoding: 'utf8' });
+    await fs.promises.appendFile(file, JSON.stringify(entry) + '\n', { encoding: 'utf8' });
   }
 
   public async close(): Promise<void> {
